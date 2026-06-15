@@ -228,7 +228,6 @@ class BiteshipService {
   /// [destinationAreaId] didapat dari [searchArea].
   Future<List<BiteshipRate>> getRates({
     required String destinationAreaId,
-    required String destinationAddress,
     required List<ShipmentItem> items,
     List<String>? couriers,
   }) async {
@@ -236,7 +235,6 @@ class BiteshipService {
       final callable = _functions.httpsCallable('getBiteshipRates');
       final result = await callable.call({
         'destinationAreaId': destinationAreaId,
-        'destinationAddress': destinationAddress,
         'items': items.map((i) => i.toMap()).toList(),
         if (couriers != null) 'couriers': couriers,
       });

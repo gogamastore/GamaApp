@@ -1,13 +1,32 @@
 {
   "project_info": {
-    "project_number": "272011170653",
-    "project_id": "gallery-makassar-web-876-8c508",
-    "storage_bucket": "gallery-makassar-web-876-8c508.firebasestorage.app"
+    "project_number": "889047904404",
+    "project_id": "gallerypos",
+    "storage_bucket": "gallerypos.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:272011170653:android:059eb8ba884e63662e0eb4",
+        "mobilesdk_app_id": "1:889047904404:android:09404bb05ad0a7e4a5c481",
+        "android_client_info": {
+          "package_name": "Store.gallery.pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:889047904404:android:6f293594961cb901a5c481",
         "android_client_info": {
           "package_name": "com.example.myapp"
         }
@@ -15,7 +34,45 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAQf9P1wNXMR0tiWTDmMhLgCjkq_IdIYN0"
+          "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:889047904404:android:da1f41261314fd26a5c481",
+        "android_client_info": {
+          "package_name": "store.gallerymakassar.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:889047904404:android:bf00294bd57f3ae1a5c481",
+        "android_client_info": {
+          "package_name": "store.gogama.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
         }
       ],
       "services": {

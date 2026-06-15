@@ -10,8 +10,13 @@ class Address {
   final String postalCode;
   final String province;
   final bool isDefault;
-  final double latitude;
-  final double longitude;
+
+  // ── BARU: koordinat GPS dari Google Maps ──────────────────────
+  final double? latitude;
+  final double? longitude;
+
+  /// True jika koordinat sudah diisi — dipakai untuk GoSend/Grab
+  bool get hasCoordinates => latitude != null && longitude != null;
 
   Address({
     required this.id,
@@ -23,12 +28,12 @@ class Address {
     required this.postalCode,
     required this.province,
     required this.isDefault,
-    this.latitude = 0.0,
-    this.longitude = 0.0,
+    this.latitude,
+    this.longitude,
   });
 
   factory Address.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>;
     return Address(
       id: doc.id,
       label: data['label'] ?? '',
@@ -39,8 +44,9 @@ class Address {
       postalCode: data['postalCode'] ?? data['postal_code'] ?? '',
       province: data['province'] ?? '',
       isDefault: data['isDefault'] ?? false,
-      latitude: (data['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (data['longitude'] as num?)?.toDouble() ?? 0.0,
+      // Baca koordinat — null jika belum pernah disimpan
+      latitude: (data['latitude'] as num?)?.toDouble(),
+      longitude: (data['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -54,14 +60,14 @@ class Address {
       'postalCode': postalCode,
       'province': province,
       'isDefault': isDefault,
-      'latitude': latitude,
-      'longitude': longitude,
+      // Simpan null jika tidak ada koordinat (tidak hapus field lama)
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
       'created_at': FieldValue.serverTimestamp(),
       'updated_at': FieldValue.serverTimestamp(),
     };
   }
 
-  // Add a copyWith method for easier state management
   Address copyWith({
     String? id,
     String? label,

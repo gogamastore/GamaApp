@@ -231,7 +231,7 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
     try {
       final rates = await _service.getRates(
         destinationAreaId: widget.destinationAreaId!,
-        items: widget.items, destinationAddress: '',
+        items: widget.items,
       );
       if (mounted) setState(() => _rates = rates);
     } on BiteshipException catch (e) {
@@ -525,7 +525,7 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
       'reguler': Colors.teal,
     };
     final color = colors[category] ?? Colors.grey;
-    final label = BiteshipRate(
+    final label = const BiteshipRate(
       courierId: '',
       courierName: '',
       courierServiceCode: '',
@@ -538,7 +538,7 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
       maxDay: 0,
       estimatedDelivery: '',
       available: true,
-      category: category,
+      category: '',
     ).categoryLabel;
 
     return Container(

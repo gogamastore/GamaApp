@@ -45,17 +45,17 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyDIl-RgVHblRZx-MZHlhRWEOK90iw6eEyI',
-    appId: '1:889047904404:web:15008b6e4ff1cfbfa5c481',
+    appId: '1:889047904404:web:e681227fb498239fa5c481',
     messagingSenderId: '889047904404',
     projectId: 'gallerypos',
     authDomain: 'gallerypos.firebaseapp.com',
     storageBucket: 'gallerypos.firebasestorage.app',
-    measurementId: 'G-ZY557LYH1W',
+    measurementId: 'G-SYMNEX7VYL',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg',
-    appId: '1:889047904404:android:bf00294bd57f3ae1a5c481',
+    appId: '1:889047904404:android:09404bb05ad0a7e4a5c481',
     messagingSenderId: '889047904404',
     projectId: 'gallerypos',
     storageBucket: 'gallerypos.firebasestorage.app',
