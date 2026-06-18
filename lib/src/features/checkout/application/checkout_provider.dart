@@ -8,8 +8,6 @@ import '../../cart/application/cart_provider.dart' show CartProvider;
 import '../../profile/domain/address.dart';
 import '../domain/bank_account.dart';
 import '../domain/shipping_option.dart';
-// ── Import service pengiriman ──────────────────────────────────────
-import '../data/delivery_service.dart';
 import '../data/biteship_service.dart';
 import '../data/payment_service.dart';
 
@@ -43,7 +41,6 @@ class CheckoutProvider with ChangeNotifier {
   final FirestoreService _firestoreService;
   final CartProvider _cartProvider;
 
-  // ── State dasar ───────────────────────────────────────────────
   bool _isInitializing = true;
   bool _isProcessingOrder = false;
 
@@ -51,14 +48,6 @@ class CheckoutProvider with ChangeNotifier {
   List<Address> _userAddresses = [];
 
   final List<ShippingOption> _shippingOptions = [
-    ShippingOption(
-      id: 'courier',
-      name: 'Pengiriman oleh Kurir',
-      price: 15000,
-      estimatedDays: '1-3 hari',
-      description:
-          'Pengiriman menggunakan kurir, harga mulai dari Rp 15.000/koli',
-    ),
     ShippingOption(
       id: 'pickup',
       name: 'Ambil di Toko',
@@ -69,22 +58,19 @@ class CheckoutProvider with ChangeNotifier {
   ];
 
   ShippingOption? _selectedShipping;
-  String _selectedPaymentMethod = 'bank_transfer';
+  String _selectedPaymentMethod = 'midtrans';
   Address? _selectedAddress;
   final DeliveryInfo _deliveryInfo = DeliveryInfo();
   XFile? _paymentProofImage;
 
-  // ── Payment (Midtrans) ────────────────────────────────────────
+  // Payment
   final PaymentService _paymentService = PaymentService();
   String? _midtransRedirectUrl;
   String? _midtransToken;
   bool _isCreatingPayment = false;
   String? _lastOrderId;
 
-  // ── Instant Delivery (GoSend / Grab) ─────────────────────────
-  ShippingRate? _selectedInstantRate;
-
-  // ── Biteship (JNE, J&T, SiCepat, dll) ───────────────────────
+  // Biteship
   final BiteshipService _biteshipService = BiteshipService();
   BiteshipArea? _selectedDestinationArea;
   List<BiteshipRate> _biteshipRates = [];
@@ -93,7 +79,7 @@ class CheckoutProvider with ChangeNotifier {
   String? _biteshipRatesError;
 
   // ─────────────────────────────────────────────────────────────
-  // Getters — state dasar
+  // Getters
   // ─────────────────────────────────────────────────────────────
   bool get isInitializing => _isInitializing;
   bool get isProcessingOrder => _isProcessingOrder;
@@ -106,51 +92,21 @@ class CheckoutProvider with ChangeNotifier {
   DeliveryInfo get deliveryInfo => _deliveryInfo;
   XFile? get paymentProofImage => _paymentProofImage;
 
-  // ─────────────────────────────────────────────────────────────
-  // Getters — Payment
-  // ─────────────────────────────────────────────────────────────
   String? get midtransRedirectUrl => _midtransRedirectUrl;
   String? get midtransToken => _midtransToken;
   bool get isCreatingPayment => _isCreatingPayment;
   String? get lastOrderId => _lastOrderId;
 
-  // ─────────────────────────────────────────────────────────────
-  // Getters — Instant Delivery (GoSend/Grab)
-  // ─────────────────────────────────────────────────────────────
-  ShippingRate? get selectedInstantRate => _selectedInstantRate;
-
-  /// Konversi selectedAddress → DeliveryLocation untuk GoSend/Grab.
-  /// Mengembalikan null jika alamat belum dipilih atau belum ada koordinat GPS.
-  DeliveryLocation? get selectedAddressAsDeliveryLocation {
-    final addr = _selectedAddress;
-    if (addr == null || !addr.hasCoordinates) return null;
-    return DeliveryLocation(
-      latitude: addr.latitude!,
-      longitude: addr.longitude!,
-      address: '${addr.address}, ${addr.city}, ${addr.province}',
-      contactName: addr.name,
-      contactPhone: addr.phone,
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Getters — Biteship
-  // ─────────────────────────────────────────────────────────────
   BiteshipArea? get selectedDestinationArea => _selectedDestinationArea;
   List<BiteshipRate> get biteshipRates => _biteshipRates;
   BiteshipRate? get selectedBiteshipRate => _selectedBiteshipRate;
   bool get isLoadingBiteshipRates => _isLoadingBiteshipRates;
   String? get biteshipRatesError => _biteshipRatesError;
 
-  // ─────────────────────────────────────────────────────────────
-  // Getters — Kalkulasi harga
-  // Prioritas: Biteship → GoSend/Grab → Shipping manual
-  // ─────────────────────────────────────────────────────────────
   double get subtotal => _cartProvider.total;
 
   double get shippingCost {
     if (_selectedBiteshipRate != null) return _selectedBiteshipRate!.price;
-    if (_selectedInstantRate != null) return _selectedInstantRate!.price;
     return _selectedShipping?.price ?? 0;
   }
 
@@ -174,15 +130,31 @@ class CheckoutProvider with ChangeNotifier {
     developer.log('Initializing CheckoutProvider...', name: 'CheckoutProvider');
     _isInitializing = true;
     notifyListeners();
-    _selectedShipping = _shippingOptions.first;
     await _fetchBankAccounts();
     await _fetchUserAddresses();
     _isInitializing = false;
     developer.log(
-      'Initialization complete. Found ${_userAddresses.length} addresses.',
+      'Done. ${_userAddresses.length} addresses.',
       name: 'CheckoutProvider',
     );
     notifyListeners();
+
+    // Re-fetch rates saat cart berubah
+    _cartProvider.addListener(_onCartChanged);
+  }
+
+  void _onCartChanged() {
+    if (_selectedDestinationArea != null &&
+        _biteshipRates.isEmpty &&
+        !_isLoadingBiteshipRates) {
+      fetchBiteshipRates();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cartProvider.removeListener(_onCartChanged);
+    super.dispose();
   }
 
   Future<void> _fetchBankAccounts() async {
@@ -190,67 +162,132 @@ class CheckoutProvider with ChangeNotifier {
       _bankAccounts = await _firestoreService.getBankAccounts();
     } catch (e) {
       _bankAccounts = [];
-      developer.log('Error fetching bank accounts',
-          name: 'CheckoutProvider', error: e);
     }
   }
 
   Future<void> _fetchUserAddresses() async {
     final user = _authService.currentUser;
-    if (user != null) {
-      developer.log('Fetching addresses for user: ${user.uid}',
+    if (user == null) return;
+
+    try {
+      _userAddresses = await _firestoreService.getUserAddresses(user.uid);
+      developer.log('Fetched ${_userAddresses.length} addresses.',
           name: 'CheckoutProvider');
+
+      Address? defaultAddress;
       try {
-        _userAddresses = await _firestoreService.getUserAddresses(user.uid);
-        developer.log(
-          'Successfully fetched ${_userAddresses.length} addresses.',
-          name: 'CheckoutProvider',
-        );
-
-        Address? defaultAddress;
-        try {
-          defaultAddress = _userAddresses.firstWhere((addr) => addr.isDefault);
-        } catch (e) {
-          if (_userAddresses.isNotEmpty) defaultAddress = _userAddresses.first;
-        }
-
-        if (defaultAddress != null) selectSavedAddress(defaultAddress);
-      } catch (e, s) {
-        _userAddresses = [];
-        developer.log(
-          'Error fetching user addresses',
-          name: 'CheckoutProvider',
-          error: e,
-          stackTrace: s,
-        );
+        defaultAddress = _userAddresses.firstWhere((a) => a.isDefault);
+      } catch (_) {
+        if (_userAddresses.isNotEmpty) defaultAddress = _userAddresses.first;
       }
-    } else {
-      developer.log(
-        'Cannot fetch addresses: User is not logged in.',
-        name: 'CheckoutProvider',
-      );
+
+      if (defaultAddress != null) {
+        selectSavedAddress(defaultAddress);
+        // Auto-load rates untuk alamat default
+        await _loadRatesForAddress(defaultAddress);
+      }
+    } catch (e, s) {
       _userAddresses = [];
+      developer.log('Error fetching addresses',
+          name: 'CheckoutProvider', error: e, stackTrace: s);
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Methods — Shipping manual & alamat
+  // Method utama: load rates untuk alamat tertentu
+  // Strategy:
+  //   1. Jika ada koordinat GPS → fetch rates by coords (lebih akurat)
+  //   2. Jika tidak ada → cari area ID dari kota, lalu fetch rates
+  // ─────────────────────────────────────────────────────────────
+  Future<void> _loadRatesForAddress(Address address) async {
+    developer.log(
+      '_loadRatesForAddress: city=${address.city}, '
+      'postalCode=${address.postalCode}, '
+      'hasCoords=${address.hasCoordinates}',
+      name: 'CheckoutProvider',
+    );
+
+    await _searchAreaAndFetchRates(
+      cityQuery: address.city,
+      destLat: address.latitude,
+      destLng: address.longitude,
+      postalCode: address.postalCode,
+    );
+  }
+
+  /// Cari area Biteship dan fetch rates sekaligus.
+  /// Mencoba beberapa variasi nama kota sampai ada yang berhasil.
+  Future<void> _searchAreaAndFetchRates({
+    required String cityQuery,
+    double? destLat,
+    double? destLng,
+    String? postalCode,
+  }) async {
+    // Bersihkan nama kota — hapus "Kota ", "Kabupaten ", dll
+    final cleanCity = cityQuery
+        .replaceAll(
+            RegExp(r'^(Kota |Kabupaten |Kab\. |Kab |Kec\. |Kec )',
+                caseSensitive: false),
+            '')
+        .trim();
+
+    // Prioritaskan kode pos karena lebih spesifik dan akurat
+    // Biteship butuh kode pos untuk dapat area ID yang tepat
+    final queries = <String>[
+      if (postalCode != null && postalCode.isNotEmpty)
+        postalCode, // ← prioritas 1
+      cleanCity, // ← prioritas 2: nama kota bersih
+      cityQuery, // ← prioritas 3: nama kota asli dari Firestore
+    ].where((q) => q.isNotEmpty && q.length >= 3).toList();
+
+    BiteshipArea? foundArea;
+
+    for (final query in queries) {
+      developer.log('Mencari area Biteship: "$query"',
+          name: 'CheckoutProvider');
+      try {
+        final areas = await _biteshipService.searchArea(query);
+        developer.log('Hasil "$query": ${areas.length} area',
+            name: 'CheckoutProvider');
+        if (areas.isNotEmpty) {
+          foundArea = areas.first;
+          developer.log('Area ditemukan: ${foundArea.name} (${foundArea.id})',
+              name: 'CheckoutProvider');
+          break;
+        }
+      } catch (e) {
+        developer.log('Error search "$query": $e', name: 'CheckoutProvider');
+      }
+    }
+
+    if (foundArea != null) {
+      _selectedDestinationArea = foundArea;
+      _selectedBiteshipRate = null;
+      _biteshipRates = [];
+      notifyListeners();
+      await fetchBiteshipRates(
+        destLat: destLat,
+        destLng: destLng,
+      );
+    } else {
+      developer.log(
+        'Area tidak ditemukan untuk: "$cityQuery" / postalCode: "$postalCode". '
+        'User perlu pilih manual via BiteshipAreaSearchField.',
+        name: 'CheckoutProvider',
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Methods — Alamat & Pengiriman
   // ─────────────────────────────────────────────────────────────
   void selectShippingOption(ShippingOption option) {
-    if (_selectedShipping?.id == option.id) return;
     _selectedShipping = option;
-    // Nonaktifkan pilihan kurir instan & Biteship jika pilih manual
-    _selectedInstantRate = null;
     _selectedBiteshipRate = null;
-    if (option.id == 'courier' && _selectedPaymentMethod == 'cod') {
-      _selectedPaymentMethod = 'bank_transfer';
-    }
     notifyListeners();
   }
 
   void selectPaymentMethod(String method) {
-    if (_selectedPaymentMethod == method) return;
-    if (method == 'cod' && _selectedShipping?.id == 'courier') return;
     _selectedPaymentMethod = method;
     notifyListeners();
   }
@@ -263,6 +300,17 @@ class CheckoutProvider with ChangeNotifier {
     _deliveryInfo.city = address.city;
     _deliveryInfo.postalCode = address.postalCode;
     notifyListeners();
+  }
+
+  /// Dipanggil saat user memilih alamat dari dropdown checkout.
+  /// Auto-load rates berdasarkan alamat yang dipilih.
+  Future<void> selectSavedAddressAndLoadRates(Address address) async {
+    selectSavedAddress(address);
+    _biteshipRates = [];
+    _selectedBiteshipRate = null;
+    _selectedDestinationArea = null;
+    notifyListeners();
+    await _loadRatesForAddress(address);
   }
 
   void clearSelectedAddress() {
@@ -290,77 +338,101 @@ class CheckoutProvider with ChangeNotifier {
     _deliveryInfo.postalCode = postalCode ?? _deliveryInfo.postalCode;
     _deliveryInfo.specialInstructions =
         specialInstructions ?? _deliveryInfo.specialInstructions;
-    // Saat user edit manual, lepas referensi ke saved address
     _selectedAddress = null;
     notifyListeners();
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Methods — Instant Delivery (GoSend / Grab)
+  // Methods — Biteship
   // ─────────────────────────────────────────────────────────────
 
-  /// Pilih tarif GoSend atau Grab. Set null untuk deselect.
-  void selectInstantRate(ShippingRate? rate) {
-    _selectedInstantRate = rate;
-    if (rate != null) {
-      // Nonaktifkan pilihan lain jika instant dipilih
-      _selectedShipping = null;
-      _selectedBiteshipRate = null;
-    }
-    notifyListeners();
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Methods — Biteship (JNE, J&T, SiCepat, dll)
-  // ─────────────────────────────────────────────────────────────
-
-  /// Dipanggil saat user memilih area dari BiteshipAreaSearchField.
+  /// Dipanggil saat user pilih area manual dari BiteshipAreaSearchField
   void onDestinationAreaSelected(BiteshipArea area) {
     _selectedDestinationArea = area;
     _selectedBiteshipRate = null;
     _biteshipRates = [];
+    _selectedShipping = null;
     notifyListeners();
-    fetchBiteshipRates();
+    fetchBiteshipRates(
+      destLat: _selectedAddress?.latitude,
+      destLng: _selectedAddress?.longitude,
+    );
   }
 
-  /// Fetch tarif Biteship berdasarkan area tujuan yang dipilih.
-  Future<void> fetchBiteshipRates() async {
-    if (_selectedDestinationArea == null || _cartProvider.items.isEmpty) return;
+  /// Fallback: search area dari nama kota (dipanggil jika tidak ada koordinat)
+  Future<void> searchAndSetBiteshipAreaFromCity(String cityName) async {
+    await _searchAreaAndFetchRates(cityQuery: cityName);
+  }
+
+  /// Fetch tarif Biteship.
+  /// [destLat] dan [destLng] opsional — jika ada, kurir instan ikut muncul.
+  Future<void> fetchBiteshipRates({
+    double? destLat,
+    double? destLng,
+  }) async {
+    if (_selectedDestinationArea == null) return;
+
+    // Gunakan koordinat dari parameter atau dari alamat tersimpan
+    final lat = destLat ?? _selectedAddress?.latitude;
+    final lng = destLng ?? _selectedAddress?.longitude;
+    final hasCoords = lat != null && lng != null;
+
+    developer.log(
+      'fetchBiteshipRates: area=${_selectedDestinationArea!.id}, '
+      'cartItems=${_cartProvider.items.length}, '
+      'hasCoords=$hasCoords',
+      name: 'CheckoutProvider',
+    );
 
     _isLoadingBiteshipRates = true;
     _biteshipRatesError = null;
     notifyListeners();
 
-    final shipmentItems = _cartProvider.items
-        .map((item) => ShipmentItem(
-              productId: item.productId,
-              name: item.nama,
-              price: item.harga,
-              quantity: item.quantity,
-              weightGram: 200, // default 200g per item
-            ))
-        .toList();
+    final shipmentItems = _cartProvider.items.isNotEmpty
+        ? _cartProvider.items
+            .map((item) => ShipmentItem(
+                  productId: item.productId,
+                  name: item.nama,
+                  price: item.harga,
+                  quantity: item.quantity,
+                  weightGram: 200,
+                ))
+            .toList()
+        : [
+            ShipmentItem(
+              productId: 'default',
+              name: 'Paket',
+              price: 50000,
+              quantity: 1,
+              weightGram: 500,
+            ),
+          ];
 
     try {
       _biteshipRates = await _biteshipService.getRates(
         destinationAreaId: _selectedDestinationArea!.id,
         items: shipmentItems,
+        destinationLatitude: lat,
+        destinationLongitude: lng,
+      );
+      developer.log(
+        'Biteship rates: ${_biteshipRates.length} layanan',
+        name: 'CheckoutProvider',
       );
     } on BiteshipException catch (e) {
       _biteshipRatesError = e.message;
       _biteshipRates = [];
+      developer.log('Biteship error',
+          name: 'CheckoutProvider', error: e.message);
     } finally {
       _isLoadingBiteshipRates = false;
       notifyListeners();
     }
   }
 
-  /// Dipanggil saat user memilih salah satu tarif Biteship.
   void selectBiteshipRate(BiteshipRate rate) {
     _selectedBiteshipRate = rate;
-    // Nonaktifkan pilihan lain
     _selectedShipping = null;
-    _selectedInstantRate = null;
     notifyListeners();
   }
 
@@ -368,9 +440,8 @@ class CheckoutProvider with ChangeNotifier {
   // Methods — Bukti bayar
   // ─────────────────────────────────────────────────────────────
   Future<void> pickPaymentProof() async {
-    final ImagePicker picker = ImagePicker();
     try {
-      final XFile? image = await picker.pickImage(
+      final XFile? image = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         imageQuality: 80,
       );
@@ -407,7 +478,6 @@ class CheckoutProvider with ChangeNotifier {
 
     try {
       final now = DateTime.now();
-      final isoTimestamp = now.toUtc().toIso8601String();
 
       String paymentProofUrl = '';
       if (_paymentProofImage != null) {
@@ -418,25 +488,17 @@ class CheckoutProvider with ChangeNotifier {
         );
       }
 
-      // Tentukan nama & kode kurir yang dipilih
       String shippingMethodName = _selectedShipping?.name ?? '';
-      double shippingFee = shippingCost;
-
       if (_selectedBiteshipRate != null) {
         shippingMethodName =
             '${_selectedBiteshipRate!.courierName} ${_selectedBiteshipRate!.serviceName}';
-      } else if (_selectedInstantRate != null) {
-        shippingMethodName = _selectedInstantRate!.serviceName;
       }
 
       final orderData = {
-        // Timestamps
-        'created_at': isoTimestamp,
-        'updated_at': isoTimestamp,
+        'created_at': now.toUtc().toIso8601String(),
+        'updated_at': now.toUtc().toIso8601String(),
         'date': now,
-        'stockUpdateTimestamp': isoTimestamp,
-
-        // Customer
+        'stockUpdateTimestamp': now.toUtc().toIso8601String(),
         'customer': _deliveryInfo.recipientName,
         'customerId': user.uid,
         'customerDetails': {
@@ -445,14 +507,10 @@ class CheckoutProvider with ChangeNotifier {
               '${_deliveryInfo.address}, ${_deliveryInfo.city}, ${_deliveryInfo.postalCode}',
           'whatsapp': _deliveryInfo.phoneNumber,
         },
-
-        // Koordinat tujuan (untuk GoSend/Grab jika tersedia)
-        if (_selectedAddress?.hasCoordinates == true) ...{
+        if (_selectedAddress?.latitude != null)
           'destinationLatitude': _selectedAddress!.latitude,
+        if (_selectedAddress?.longitude != null)
           'destinationLongitude': _selectedAddress!.longitude,
-        },
-
-        // Produk
         'products': _cartProvider.items
             .map((item) => {
                   'productId': item.productId,
@@ -462,22 +520,15 @@ class CheckoutProvider with ChangeNotifier {
                   'image': item.gambar,
                 })
             .toList(),
-        'productIds':
-            _cartProvider.items.map((item) => item.productId).toList(),
-
-        // Pembayaran
+        'productIds': _cartProvider.items.map((e) => e.productId).toList(),
         'paymentMethod': _selectedPaymentMethod,
         'paymentStatus': _paymentProofImage != null ? 'Paid' : 'Unpaid',
         'paymentProofUrl': paymentProofUrl,
         'paymentProofFileName': _paymentProofImage?.name ?? '',
         'paymentProofId': '',
         'paymentProofUploaded': _paymentProofImage != null,
-
-        // Pengiriman
         'shippingMethod': shippingMethodName,
-        'shippingFee': shippingFee,
-
-        // Biteship — diisi jika pakai JNE/J&T/dll
+        'shippingFee': shippingCost,
         if (_selectedBiteshipRate != null) ...{
           'biteshipCourierCode': _selectedBiteshipRate!.courierId,
           'biteshipServiceCode': _selectedBiteshipRate!.courierServiceCode,
@@ -485,30 +536,22 @@ class CheckoutProvider with ChangeNotifier {
           'biteshipServiceName': _selectedBiteshipRate!.serviceName,
           'destinationAreaId': _selectedDestinationArea?.id ?? '',
         },
-
-        // Totals
         'subtotal': subtotal,
         'total': grandTotal,
-
-        // Status
         'status': 'Pending',
         'stockUpdated': true,
       };
 
       final itemsToUpdate = _cartProvider.items
-          .map((item) =>
-              {'productId': item.productId, 'quantity': item.quantity})
+          .map((i) => {'productId': i.productId, 'quantity': i.quantity})
           .toList();
 
       await _firestoreService.placeOrderInTransaction(
           newOrderId, orderData, itemsToUpdate);
 
-      // Simpan lastOrderId sebelum cart dikosongkan
       _lastOrderId = newOrderId;
-
       await _cartProvider.clearCart();
-
-      return null; // Success
+      return null;
     } catch (e) {
       developer.log('Error processing order',
           name: 'CheckoutProvider', error: e);
@@ -520,27 +563,18 @@ class CheckoutProvider with ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Methods — Midtrans payment
+  // Methods — Midtrans
   // ─────────────────────────────────────────────────────────────
-
-  /// Buat transaksi Midtrans Snap untuk orderId yang sudah dibuat.
-  /// Mengembalikan String pesan error, atau null jika berhasil.
   Future<String?> createMidtransPayment(String orderId) async {
     _isCreatingPayment = true;
     notifyListeners();
-
     try {
       final result = await _paymentService.createTransaction(orderId);
       _midtransToken = result.token;
       _midtransRedirectUrl = result.redirectUrl;
       notifyListeners();
-      return null; // sukses
+      return null;
     } on PaymentException catch (e) {
-      developer.log(
-        'createMidtransPayment error',
-        name: 'CheckoutProvider',
-        error: e.message,
-      );
       return e.message;
     } finally {
       _isCreatingPayment = false;

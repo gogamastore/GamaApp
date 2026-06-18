@@ -31,7 +31,7 @@ class BiteshipArea {
 
 /// Satu pilihan tarif kurir dari Biteship
 class BiteshipRate {
-  final String courierId;       // "jnt", "jne", "sicepat", dll
+  final String courierId; // "jnt", "jne", "sicepat", dll
   final String courierName;
   final String courierServiceCode;
   final String serviceName;
@@ -219,7 +219,8 @@ class BiteshipService {
           .map((a) => BiteshipArea.fromMap(a as Map<String, dynamic>))
           .toList();
     } on FirebaseFunctionsException catch (e) {
-      developer.log('searchArea error', name: 'BiteshipService', error: e.message);
+      developer.log('searchArea error',
+          name: 'BiteshipService', error: e.message);
       throw BiteshipException(e.message ?? 'Gagal mencari area.');
     }
   }
@@ -230,6 +231,8 @@ class BiteshipService {
     required String destinationAreaId,
     required List<ShipmentItem> items,
     List<String>? couriers,
+    double? destinationLatitude,   // ← BARU
+    double? destinationLongitude,  // ← BARU
   }) async {
     try {
       final callable = _functions.httpsCallable('getBiteshipRates');
@@ -237,6 +240,11 @@ class BiteshipService {
         'destinationAreaId': destinationAreaId,
         'items': items.map((i) => i.toMap()).toList(),
         if (couriers != null) 'couriers': couriers,
+        // Kirim koordinat jika tersedia → aktifkan kurir instan
+        if (destinationLatitude != null)
+          'destinationLatitude': destinationLatitude,
+        if (destinationLongitude != null)
+          'destinationLongitude': destinationLongitude,
       });
 
       final data = result.data as Map<String, dynamic>;
@@ -265,7 +273,8 @@ class BiteshipService {
         trackingUrl: data['trackingUrl'] as String? ?? '',
       );
     } on FirebaseFunctionsException catch (e) {
-      developer.log('createOrder error', name: 'BiteshipService', error: e.message);
+      developer.log('createOrder error',
+          name: 'BiteshipService', error: e.message);
       throw BiteshipException(e.message ?? 'Gagal membuat order pengiriman.');
     }
   }
@@ -277,7 +286,8 @@ class BiteshipService {
       final result = await callable.call({'orderId': orderId});
       return BiteshipTrackingInfo.fromMap(result.data as Map<String, dynamic>);
     } on FirebaseFunctionsException catch (e) {
-      developer.log('trackOrder error', name: 'BiteshipService', error: e.message);
+      developer.log('trackOrder error',
+          name: 'BiteshipService', error: e.message);
       return const BiteshipTrackingInfo(hasDelivery: false);
     }
   }

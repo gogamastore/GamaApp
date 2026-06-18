@@ -10,7 +10,6 @@ import 'dart:developer' as developer;
 import '../../authentication/data/auth_service.dart';
 import '../data/order_service.dart';
 import '../domain/order.dart';
-import 'widgets/delivery_tracking_card.dart';
 import 'widgets/biteship_tracking_card.dart';
 
 class OrderDetailScreen extends StatefulWidget {
@@ -203,10 +202,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             // Tampilkan DeliveryTrackingCard hanya jika order sudah dikirim
             if (_currentOrder.status.toLowerCase() == 'shipped' ||
                 _currentOrder.status.toLowerCase() == 'dikirim')
-              DeliveryTrackingCard(
-                orderId: _currentOrder.id,
-                existingTrackingUrl: _currentOrder.deliveryTrackingUrl,
-              ),
             const SizedBox(height: 8),
             // Tampilkan BiteshipTrackingCard hanya jika order sudah dikirim dan ada waybill
             if ((_currentOrder.status.toLowerCase() == 'shipped' ||
