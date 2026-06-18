@@ -801,4 +801,8 @@ class CheckoutScreen extends StatelessWidget {
           ],
         ),
       );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 6d80cf66d5c337a9b7e299e7fc51ad611b995e11
