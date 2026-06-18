@@ -171,8 +171,7 @@ class CheckoutProvider with ChangeNotifier {
 
     try {
       _userAddresses = await _firestoreService.getUserAddresses(user.uid);
-      developer.log('Fetched ${_userAddresses.length} addresses.',
-          name: 'CheckoutProvider');
+      developer.log('Fetched ${_userAddresses.length} addresses.', name: 'CheckoutProvider');
 
       Address? defaultAddress;
       try {
@@ -225,30 +224,25 @@ class CheckoutProvider with ChangeNotifier {
   }) async {
     // Bersihkan nama kota — hapus "Kota ", "Kabupaten ", dll
     final cleanCity = cityQuery
-        .replaceAll(
-            RegExp(r'^(Kota |Kabupaten |Kab\. |Kab |Kec\. |Kec )',
-                caseSensitive: false),
-            '')
+        .replaceAll(RegExp(r'^(Kota |Kabupaten |Kab\. |Kab |Kec\. |Kec )',
+            caseSensitive: false), '')
         .trim();
 
     // Prioritaskan kode pos karena lebih spesifik dan akurat
     // Biteship butuh kode pos untuk dapat area ID yang tepat
     final queries = <String>[
-      if (postalCode != null && postalCode.isNotEmpty)
-        postalCode, // ← prioritas 1
-      cleanCity, // ← prioritas 2: nama kota bersih
-      cityQuery, // ← prioritas 3: nama kota asli dari Firestore
+      if (postalCode != null && postalCode.isNotEmpty) postalCode, // ← prioritas 1
+      cleanCity,    // ← prioritas 2: nama kota bersih
+      cityQuery,    // ← prioritas 3: nama kota asli dari Firestore
     ].where((q) => q.isNotEmpty && q.length >= 3).toList();
 
     BiteshipArea? foundArea;
 
     for (final query in queries) {
-      developer.log('Mencari area Biteship: "$query"',
-          name: 'CheckoutProvider');
+      developer.log('Mencari area Biteship: "$query"', name: 'CheckoutProvider');
       try {
         final areas = await _biteshipService.searchArea(query);
-        developer.log('Hasil "$query": ${areas.length} area',
-            name: 'CheckoutProvider');
+        developer.log('Hasil "$query": ${areas.length} area', name: 'CheckoutProvider');
         if (areas.isNotEmpty) {
           foundArea = areas.first;
           developer.log('Area ditemukan: ${foundArea.name} (${foundArea.id})',
@@ -422,8 +416,7 @@ class CheckoutProvider with ChangeNotifier {
     } on BiteshipException catch (e) {
       _biteshipRatesError = e.message;
       _biteshipRates = [];
-      developer.log('Biteship error',
-          name: 'CheckoutProvider', error: e.message);
+      developer.log('Biteship error', name: 'CheckoutProvider', error: e.message);
     } finally {
       _isLoadingBiteshipRates = false;
       notifyListeners();
@@ -450,8 +443,7 @@ class CheckoutProvider with ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      developer.log('Error picking payment proof',
-          name: 'CheckoutProvider', error: e);
+      developer.log('Error picking payment proof', name: 'CheckoutProvider', error: e);
     }
   }
 
@@ -482,9 +474,7 @@ class CheckoutProvider with ChangeNotifier {
       String paymentProofUrl = '';
       if (_paymentProofImage != null) {
         paymentProofUrl = await _firestoreService.uploadPaymentProof(
-          user.uid,
-          newOrderId,
-          _paymentProofImage!,
+          user.uid, newOrderId, _paymentProofImage!,
         );
       }
 
@@ -553,8 +543,7 @@ class CheckoutProvider with ChangeNotifier {
       await _cartProvider.clearCart();
       return null;
     } catch (e) {
-      developer.log('Error processing order',
-          name: 'CheckoutProvider', error: e);
+      developer.log('Error processing order', name: 'CheckoutProvider', error: e);
       return e.toString();
     } finally {
       _isProcessingOrder = false;

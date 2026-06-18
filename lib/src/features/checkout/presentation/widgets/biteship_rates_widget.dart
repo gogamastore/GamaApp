@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
+import '../../application/checkout_provider.dart';
 import '../../data/biteship_service.dart';
 
 // ─────────────────────────────────────────────
-// Widget 1: Autocomplete area/kota Biteship
-// Pasang di form alamat checkout, sebelum form isian
+// Widget 1: Autocomplete search area Biteship
+// (tidak berubah — tetap fetch sendiri via Cloud Function)
 // ─────────────────────────────────────────────
 class BiteshipAreaSearchField extends StatefulWidget {
   final String label;
@@ -14,7 +16,7 @@ class BiteshipAreaSearchField extends StatefulWidget {
 
   const BiteshipAreaSearchField({
     super.key,
-    this.label = 'Kota / Kecamatan Tujuan',
+    this.label = 'Cari Kota / Kecamatan Tujuan',
     required this.onAreaSelected,
     this.initialArea,
   });
@@ -37,6 +39,18 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
     if (widget.initialArea != null) {
       _selected = widget.initialArea;
       _controller.text = widget.initialArea!.displayName;
+    }
+  }
+
+  @override
+  void didUpdateWidget(BiteshipAreaSearchField old) {
+    super.didUpdateWidget(old);
+    // Sinkronkan jika initialArea berubah dari luar (auto-select dari provider)
+    if (widget.initialArea?.id != old.initialArea?.id &&
+        widget.initialArea != null) {
+      _selected = widget.initialArea;
+      _controller.text = widget.initialArea!.displayName;
+      setState(() => _suggestions = []);
     }
   }
 
@@ -123,11 +137,11 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey[300]!),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                     color: Colors.black12,
                     blurRadius: 4,
-                    offset: const Offset(0, 2)),
+                    offset: Offset(0, 2)),
               ],
             ),
             constraints: const BoxConstraints(maxHeight: 220),
@@ -141,7 +155,8 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
                   dense: true,
                   leading: const Icon(Icons.location_on,
                       size: 18, color: Colors.grey),
-                  title: Text(area.name, style: const TextStyle(fontSize: 14)),
+                  title: Text(area.name,
+                      style: const TextStyle(fontSize: 14)),
                   subtitle: Text(
                     '${area.adminName} • ${area.postalCode}',
                     style: const TextStyle(fontSize: 12),
@@ -165,97 +180,25 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
 
 // ─────────────────────────────────────────────
 // Widget 2: Daftar tarif kurir Biteship
-// Dipasang di CheckoutScreen setelah BiteshipAreaSearchField
+//
+// VERSI BARU: Baca rates dari CheckoutProvider
+// (bukan fetch sendiri) agar koordinat GPS ikut terkirim
+// dan kurir instan (GoSend/Grab) bisa muncul.
 // ─────────────────────────────────────────────
-class BiteshipRatesWidget extends StatefulWidget {
-  final String? destinationAreaId;
-  final List<ShipmentItem> items;
-  final BiteshipRate? selectedRate;
-  final void Function(BiteshipRate rate) onRateSelected;
-
-  const BiteshipRatesWidget({
-    super.key,
-    required this.destinationAreaId,
-    required this.items,
-    required this.onRateSelected,
-    this.selectedRate,
-  });
-
-  @override
-  State<BiteshipRatesWidget> createState() => _BiteshipRatesWidgetState();
-}
-
-class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
-  final _service = BiteshipService();
-  List<BiteshipRate> _rates = [];
-  bool _isLoading = false;
-  String? _error;
-  String? _lastAreaId;
-
-  // Filter kategori aktif
-  String _activeCategory = 'semua';
-  static const _categories = [
-    'semua',
-    'same_day',
-    'next_day',
-    'reguler',
-    'cargo'
-  ];
-
-  @override
-  void didUpdateWidget(BiteshipRatesWidget old) {
-    super.didUpdateWidget(old);
-    if (widget.destinationAreaId != old.destinationAreaId &&
-        widget.destinationAreaId != null) {
-      _fetchRates();
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.destinationAreaId != null) _fetchRates();
-  }
-
-  Future<void> _fetchRates() async {
-    if (widget.destinationAreaId == null) return;
-    if (widget.destinationAreaId == _lastAreaId) return; // sudah di-fetch
-
-    _lastAreaId = widget.destinationAreaId;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-      _rates = [];
-    });
-
-    try {
-      final rates = await _service.getRates(
-        destinationAreaId: widget.destinationAreaId!,
-        items: widget.items,
-      );
-      if (mounted) setState(() => _rates = rates);
-    } on BiteshipException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  List<BiteshipRate> get _filteredRates {
-    if (_activeCategory == 'semua') return _rates;
-    return _rates.where((r) => r.category == _activeCategory).toList();
-  }
+class BiteshipRatesWidget extends StatelessWidget {
+  const BiteshipRatesWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
-    if (widget.destinationAreaId == null) {
-      return _buildPlaceholder();
-    }
-    if (_isLoading) {
+    final provider = context.watch<CheckoutProvider>();
+
+    // Loading
+    if (provider.isLoadingBiteshipRates) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
+        padding: EdgeInsets.symmetric(vertical: 20),
         child: Center(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 12),
@@ -266,98 +209,85 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
         ),
       );
     }
-    if (_error != null) {
-      return _buildError();
-    }
-    if (_rates.isEmpty) {
-      return _buildEmpty();
+
+    // Error
+    if (provider.biteshipRatesError != null) {
+      return _buildError(context, provider);
     }
 
+    // Belum ada area dipilih
+    if (provider.selectedDestinationArea == null) {
+      return _buildPlaceholder();
+    }
+
+    // Kosong
+    if (provider.biteshipRates.isEmpty) {
+      return _buildEmpty(context, provider);
+    }
+
+    // Tampilkan rates
+    final rates = provider.biteshipRates;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Filter kategori
-        _buildCategoryFilter(),
-        const SizedBox(height: 12),
-        // Daftar rate
-        ..._filteredRates.map((rate) => _buildRateTile(rate)),
-        if (_filteredRates.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Tidak ada layanan untuk kategori ini.',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
+        // Info area tujuan
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green[200]!),
           ),
-        TextButton.icon(
-          onPressed: () {
-            _lastAreaId = null;
-            _fetchRates();
-          },
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Refresh Tarif'),
-          style: TextButton.styleFrom(foregroundColor: Colors.grey[600]),
+          child: Row(
+            children: [
+              Icon(Icons.location_on, size: 14, color: Colors.green[700]),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Tujuan: ${provider.selectedDestinationArea!.name}',
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.green[700]),
+                ),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => provider.fetchBiteshipRates(),
+                child: Text('Refresh',
+                    style: TextStyle(fontSize: 11, color: Colors.green[700])),
+              ),
+            ],
+          ),
         ),
+
+        // Daftar kurir
+        ...rates.map((rate) => _buildRateTile(context, rate, provider)),
       ],
     );
   }
 
-  Widget _buildCategoryFilter() {
-    final labels = {
-      'semua': 'Semua',
-      'same_day': 'Same Day',
-      'next_day': 'Next Day',
-      'reguler': 'Reguler',
-      'cargo': 'Cargo',
-    };
-    // Hanya tampilkan kategori yang memang ada datanya
-    final available = {'semua', ..._rates.map((r) => r.category)};
-    final visible = _categories.where((c) => available.contains(c)).toList();
-
-    return SizedBox(
-      height: 36,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: visible.map((cat) {
-          final isActive = _activeCategory == cat;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(labels[cat] ?? cat),
-              selected: isActive,
-              onSelected: (_) => setState(() => _activeCategory = cat),
-              selectedColor: Theme.of(context).colorScheme.primary,
-              labelStyle: TextStyle(
-                color: isActive ? Colors.white : null,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildRateTile(BiteshipRate rate) {
+  Widget _buildRateTile(
+      BuildContext context, BiteshipRate rate, CheckoutProvider provider) {
     final currency =
         NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
-    final isSelected = widget.selectedRate?.courierId == rate.courierId &&
-        widget.selectedRate?.courierServiceCode == rate.courierServiceCode;
+    final isSelected = provider.selectedBiteshipRate?.courierId == rate.courierId &&
+        provider.selectedBiteshipRate?.courierServiceCode == rate.courierServiceCode;
 
     return GestureDetector(
-      onTap: () => widget.onRateSelected(rate),
+      onTap: () => provider.selectBiteshipRate(rate),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected
               ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.07)
               : Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).colorScheme.primary
@@ -369,8 +299,8 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
           children: [
             // Radio
             Container(
-              width: 20,
-              height: 20,
+              width: 18,
+              height: 18,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
@@ -383,8 +313,8 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
               child: isSelected
                   ? Center(
                       child: Container(
-                        width: 10,
-                        height: 10,
+                        width: 9,
+                        height: 9,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Theme.of(context).colorScheme.primary,
@@ -393,39 +323,31 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
                     )
                   : null,
             ),
-            const SizedBox(width: 12),
-
-            // Logo & nama kurir
-            _buildCourierLogo(rate),
             const SizedBox(width: 10),
 
-            // Info
+            // Badge kategori
+            _buildCategoryBadge(rate.category),
+            const SizedBox(width: 8),
+
+            // Info kurir
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '${rate.courierName} ${rate.serviceName}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      _buildCategoryBadge(rate.category),
-                    ],
+                  Text(
+                    '${rate.courierName} ${rate.serviceName}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
                   ),
-                  const SizedBox(height: 2),
                   Row(
                     children: [
-                      Icon(Icons.schedule, size: 12, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
+                      Icon(Icons.schedule,
+                          size: 11, color: Colors.grey[500]),
+                      const SizedBox(width: 3),
                       Text(
                         rate.estimatedDelivery,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -434,43 +356,13 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
             ),
 
             // Harga
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (rate.hasDiscount)
-                  Text(
-                    currency.format(rate.originalPrice),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[500],
-                      decoration: TextDecoration.lineThrough,
-                    ),
-                  ),
-                Text(
-                  currency.format(rate.price),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                if (rate.hasDiscount)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'DISKON',
-                      style: TextStyle(
-                          fontSize: 9,
-                          color: Colors.red[700],
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-              ],
+            Text(
+              currency.format(rate.price),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           ],
         ),
@@ -478,88 +370,37 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
     );
   }
 
-  Widget _buildCourierLogo(BiteshipRate rate) {
-    if (rate.logo != null && rate.logo!.isNotEmpty) {
-      return SizedBox(
-        width: 36,
-        height: 36,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: Image.network(
-            rate.logo!,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) =>
-                _buildCourierInitial(rate.courierName),
-          ),
-        ),
-      );
-    }
-    return _buildCourierInitial(rate.courierName);
-  }
-
-  Widget _buildCourierInitial(String name) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Center(
-        child: Text(
-          name.length >= 2
-              ? name.substring(0, 2).toUpperCase()
-              : name.toUpperCase(),
-          style: const TextStyle(
-              fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
-        ),
-      ),
-    );
-  }
-
   Widget _buildCategoryBadge(String category) {
-    final colors = {
-      'same_day': Colors.purple,
-      'next_day': Colors.blue,
-      'cargo': Colors.brown,
-      'reguler': Colors.teal,
+    final config = switch (category) {
+      'same_day' => ('INSTAN', Colors.green),
+      'next_day' => ('NEXT DAY', Colors.blue),
+      'cargo'    => ('CARGO', Colors.brown),
+      _          => ('REGULER', Colors.teal),
     };
-    final color = colors[category] ?? Colors.grey;
-    final label = const BiteshipRate(
-      courierId: '',
-      courierName: '',
-      courierServiceCode: '',
-      serviceName: '',
-      description: '',
-      price: 0,
-      originalPrice: 0,
-      discount: 0,
-      minDay: 0,
-      maxDay: 0,
-      estimatedDelivery: '',
-      available: true,
-      category: '',
-    ).categoryLabel;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: config.$2.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: config.$2.withValues(alpha: 0.4)),
       ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 9, color: color, fontWeight: FontWeight.bold)),
+      child: Text(
+        config.$1,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: config.$2,
+        ),
+      ),
     );
   }
 
   Widget _buildPlaceholder() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
@@ -568,7 +409,7 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Pilih kota/kecamatan tujuan terlebih dahulu untuk melihat tarif kurir.',
+              'Pilih alamat tersimpan atau ketik kota tujuan untuk melihat tarif kurir.',
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
           ),
@@ -577,12 +418,12 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
     );
   }
 
-  Widget _buildError() {
+  Widget _buildError(BuildContext context, CheckoutProvider provider) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.red[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.red[200]!),
       ),
       child: Column(
@@ -590,19 +431,18 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber, color: Colors.red[400], size: 20),
+              Icon(Icons.warning_amber, color: Colors.red[400], size: 18),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(_error!,
-                    style: TextStyle(color: Colors.red[700], fontSize: 13)),
+                child: Text(
+                  provider.biteshipRatesError!,
+                  style: TextStyle(color: Colors.red[700], fontSize: 13),
+                ),
               ),
             ],
           ),
           TextButton(
-            onPressed: () {
-              _lastAreaId = null;
-              _fetchRates();
-            },
+            onPressed: () => provider.fetchBiteshipRates(),
             child: const Text('Coba Lagi'),
           ),
         ],
@@ -610,23 +450,32 @@ class _BiteshipRatesWidgetState extends State<BiteshipRatesWidget> {
     );
   }
 
-  Widget _buildEmpty() {
+  Widget _buildEmpty(BuildContext context, CheckoutProvider provider) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.orange[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.orange[200]!),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, color: Colors.orange[700]),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Tidak ada layanan kurir tersedia untuk rute ini.',
-              style: TextStyle(color: Colors.orange[800], fontSize: 13),
-            ),
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange[700]),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Tidak ada layanan kurir tersedia untuk rute ini.',
+                  style: TextStyle(color: Colors.orange[800], fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          TextButton(
+            onPressed: () => provider.fetchBiteshipRates(),
+            child: const Text('Coba Lagi'),
           ),
         ],
       ),

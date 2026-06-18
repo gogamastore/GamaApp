@@ -7,7 +7,6 @@ import '../application/checkout_provider.dart';
 import '../../cart/application/cart_provider.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../../core/data/firestore_service.dart';
-import '../data/biteship_service.dart';
 import 'widgets/delivery_info_widget.dart';
 import 'widgets/biteship_rates_widget.dart';
 
@@ -106,13 +105,12 @@ class CheckoutScreen extends StatelessWidget {
         children: [
           _sectionTitle('Alamat Tersimpan'),
           DropdownButtonFormField<String>(
-            value: provider.selectedAddress?.id,
+            initialValue: provider.selectedAddress?.id,
             hint: const Text('Pilih alamat Anda'),
             isExpanded: true,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             onChanged: (String? selectedId) {
               if (selectedId == null) return;
@@ -224,8 +222,6 @@ class CheckoutScreen extends StatelessWidget {
   // Section 3: Pilih pengiriman
   // ─────────────────────────────────────────────────────────────
   Widget _buildShippingSection(BuildContext context) {
-    final provider = context.watch<CheckoutProvider>();
-    final cartProvider = context.watch<CartProvider>();
 
     return _buildCard(
       child: Column(
@@ -258,42 +254,15 @@ class CheckoutScreen extends StatelessWidget {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text('JNE · J&T · SiCepat · GoSend · dan lainnya',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
 
-          // Status area tujuan
-          if (provider.selectedDestinationArea == null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: _buildInfoBanner(
-                icon: Icons.info_outline,
-                color: Colors.blue,
-                message: provider.userAddresses.isNotEmpty
-                    ? 'Pilih alamat tersimpan di atas untuk melihat tarif otomatis, atau ketik nama kota tujuan.'
-                    : 'Ketik nama kota/kecamatan tujuan di kolom pencarian di atas.',
-              ),
-            )
-          else ...[
-            const SizedBox(height: 12),
-            BiteshipRatesWidget(
-              destinationAreaId: provider.selectedDestinationArea?.id,
-              items: cartProvider.items
-                  .map((item) => ShipmentItem(
-                        productId: item.productId,
-                        name: item.nama,
-                        price: item.harga,
-                        quantity: item.quantity,
-                        weightGram: 200,
-                      ))
-                  .toList(),
-              selectedRate: provider.selectedBiteshipRate,
-              onRateSelected: provider.selectBiteshipRate,
-            ),
-          ],
+          // BiteshipRatesWidget baca rates dari CheckoutProvider
+          // (koordinat GPS otomatis dikirim untuk kurir instan)
+          const BiteshipRatesWidget(),
         ],
       ),
     );
@@ -342,7 +311,8 @@ class CheckoutScreen extends StatelessWidget {
                             : null,
                       )),
                   Text('Gratis — ambil langsung di toko',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey[600])),
                 ],
               ),
             ),
@@ -377,9 +347,8 @@ class CheckoutScreen extends StatelessWidget {
             title: 'Bayar via Midtrans',
             subtitle: 'GoPay · QRIS · VA Bank · Kartu Kredit · Minimarket',
             selectedValue: provider.selectedPaymentMethod,
-            onTap: () => context
-                .read<CheckoutProvider>()
-                .selectPaymentMethod('midtrans'),
+            onTap: () =>
+                context.read<CheckoutProvider>().selectPaymentMethod('midtrans'),
           ),
 
           if (provider.selectedPaymentMethod == 'midtrans') ...[
@@ -444,8 +413,7 @@ class CheckoutScreen extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color:
-              isSelected ? iconColor.withValues(alpha: 0.07) : Colors.grey[50],
+          color: isSelected ? iconColor.withValues(alpha: 0.07) : Colors.grey[50],
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? iconColor : Colors.grey[300]!,
@@ -630,7 +598,8 @@ class CheckoutScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Subtotal', style: TextStyle(color: Colors.grey[600])),
+                Text('Subtotal',
+                    style: TextStyle(color: Colors.grey[600])),
                 Text(currency.format(provider.subtotal)),
               ],
             ),
@@ -638,7 +607,8 @@ class CheckoutScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Pengiriman', style: TextStyle(color: Colors.grey[600])),
+                Text('Pengiriman',
+                    style: TextStyle(color: Colors.grey[600])),
                 Text(
                   hasShipping
                       ? currency.format(provider.shippingCost)
@@ -655,8 +625,8 @@ class CheckoutScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Total',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
                 Text(
                   currency.format(provider.grandTotal),
                   style: const TextStyle(
@@ -674,11 +644,12 @@ class CheckoutScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed:
-                    provider.isProcessingOrder || provider.isCreatingPayment
-                        ? null
-                        : () => _handlePlaceOrder(context),
-                child: provider.isProcessingOrder || provider.isCreatingPayment
+                onPressed: provider.isProcessingOrder ||
+                        provider.isCreatingPayment
+                    ? null
+                    : () => _handlePlaceOrder(context),
+                child: provider.isProcessingOrder ||
+                        provider.isCreatingPayment
                     ? const SizedBox(
                         height: 20,
                         width: 20,
@@ -774,35 +745,4 @@ class CheckoutScreen extends StatelessWidget {
       });
     }
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // Helper widgets
-  // ─────────────────────────────────────────────────────────────
-  Widget _buildInfoBanner({
-    required IconData icon,
-    required Color color,
-    required String message,
-  }) =>
-      Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child:
-                  Text(message, style: TextStyle(fontSize: 12, color: color)),
-            ),
-          ],
-        ),
-      );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 6d80cf66d5c337a9b7e299e7fc51ad611b995e11
