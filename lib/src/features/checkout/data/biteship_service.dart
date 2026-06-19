@@ -10,7 +10,7 @@ class BiteshipArea {
   final String id;
   final String name;
   final String postalCode;
-  final String adminName; // Provinsi, Kabupaten
+  final String adminName;
 
   const BiteshipArea({
     required this.id,
@@ -22,16 +22,16 @@ class BiteshipArea {
   factory BiteshipArea.fromMap(Map<String, dynamic> map) => BiteshipArea(
         id: map['id'] as String? ?? '',
         name: map['name'] as String? ?? '',
-        postalCode: map['postalCode'] as String? ?? '',
+        postalCode: map['postalCode']?.toString() ?? '',
         adminName: map['adminName'] as String? ?? '',
       );
 
-  String get displayName => '$name, $adminName ($postalCode)';
+  String get displayName => '$name ($postalCode)';
 }
 
 /// Satu pilihan tarif kurir dari Biteship
 class BiteshipRate {
-  final String courierId; // "jnt", "jne", "sicepat", dll
+  final String courierId;
   final String courierName;
   final String courierServiceCode;
   final String serviceName;
@@ -82,11 +82,10 @@ class BiteshipRate {
 
   bool get hasDiscount => discount > 0;
 
-  /// Label kategori untuk tampilan UI
   String get categoryLabel {
     switch (category) {
       case 'same_day':
-        return 'Same Day';
+        return 'Instan';
       case 'next_day':
         return 'Next Day';
       case 'cargo':
@@ -97,13 +96,13 @@ class BiteshipRate {
   }
 }
 
-/// Item produk yang dikirim (untuk kalkulasi berat & biaya)
+/// Item produk yang dikirim
 class ShipmentItem {
   final String productId;
   final String name;
   final double price;
   final int quantity;
-  final int weightGram; // berat per item dalam gram
+  final int weightGram;
 
   const ShipmentItem({
     required this.productId,
@@ -139,7 +138,7 @@ class BiteshipOrderResult {
   });
 }
 
-/// Satu entry di history tracking
+/// Entry history tracking
 class TrackingHistory {
   final String timestamp;
   final String status;
@@ -208,7 +207,7 @@ class BiteshipService {
     region: 'asia-southeast1',
   );
 
-  /// Cari area Biteship (untuk autocomplete input kota/kecamatan).
+  /// Cari area Biteship (autocomplete kota/kecamatan/kode pos)
   Future<List<BiteshipArea>> searchArea(String input) async {
     try {
       final callable = _functions.httpsCallable('searchBiteshipArea');
@@ -225,17 +224,27 @@ class BiteshipService {
     }
   }
 
-  /// Ambil daftar tarif kurir dari Biteship.
-  /// [destinationAreaId] didapat dari [searchArea].
+  /// Ambil tarif kurir dari Biteship — Mix Rates (Area ID + Koordinat GPS).
+  ///
+  /// Jika [destinationLatitude] dan [destinationLongitude] diisi,
+  /// kurir instan (GoSend, GrabExpress, Paxel, dll) akan muncul
+  /// di hasil bersama kurir reguler (JNE, J&T, SiCepat, dll).
   Future<List<BiteshipRate>> getRates({
     required String destinationAreaId,
     required List<ShipmentItem> items,
     List<String>? couriers,
-    double? destinationLatitude,   // ← BARU
-    double? destinationLongitude,  // ← BARU
+    double? destinationLatitude,   // ← koordinat GPS tujuan
+    double? destinationLongitude,  // ← koordinat GPS tujuan
   }) async {
     try {
       final callable = _functions.httpsCallable('getBiteshipRates');
+
+      developer.log(
+        'getRates: area=$destinationAreaId, '
+        'hasCoords=${destinationLatitude != null}',
+        name: 'BiteshipService',
+      );
+
       final result = await callable.call({
         'destinationAreaId': destinationAreaId,
         'items': items.map((i) => i.toMap()).toList(),
@@ -249,22 +258,24 @@ class BiteshipService {
 
       final data = result.data as Map<String, dynamic>;
       final rates = data['rates'] as List<dynamic>? ?? [];
+      developer.log('getRates: ${rates.length} layanan',
+          name: 'BiteshipService');
       return rates
           .map((r) => BiteshipRate.fromMap(r as Map<String, dynamic>))
           .toList();
     } on FirebaseFunctionsException catch (e) {
-      developer.log('getRates error', name: 'BiteshipService', error: e.message);
+      developer.log('getRates error',
+          name: 'BiteshipService', error: e.message);
       throw BiteshipException(e.message ?? 'Gagal mengambil tarif kurir.');
     }
   }
 
-  /// Buat order + request pickup otomatis ke kurir.
+  /// Buat order + request pickup otomatis ke kurir
   Future<BiteshipOrderResult> createOrder(String orderId) async {
     try {
       final callable = _functions.httpsCallable('createBiteshipOrder');
       final result = await callable.call({'orderId': orderId});
       final data = result.data as Map<String, dynamic>;
-
       return BiteshipOrderResult(
         success: data['success'] as bool? ?? false,
         biteshipOrderId: data['biteshipOrderId'] as String? ?? '',
@@ -279,12 +290,13 @@ class BiteshipService {
     }
   }
 
-  /// Cek status tracking berdasarkan orderId internal.
+  /// Cek status tracking berdasarkan orderId internal
   Future<BiteshipTrackingInfo> trackOrder(String orderId) async {
     try {
       final callable = _functions.httpsCallable('trackBiteshipOrder');
       final result = await callable.call({'orderId': orderId});
-      return BiteshipTrackingInfo.fromMap(result.data as Map<String, dynamic>);
+      return BiteshipTrackingInfo.fromMap(
+          result.data as Map<String, dynamic>);
     } on FirebaseFunctionsException catch (e) {
       developer.log('trackOrder error',
           name: 'BiteshipService', error: e.message);

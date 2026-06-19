@@ -105,7 +105,7 @@ class CheckoutScreen extends StatelessWidget {
         children: [
           _sectionTitle('Alamat Tersimpan'),
           DropdownButtonFormField<String>(
-            initialValue: provider.selectedAddress?.id,
+            value: provider.selectedAddress?.id,
             hint: const Text('Pilih alamat Anda'),
             isExpanded: true,
             decoration: const InputDecoration(
