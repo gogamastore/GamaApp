@@ -5,10 +5,11 @@ import 'package:intl/intl.dart';
 import '../../application/checkout_provider.dart';
 import '../../data/biteship_service.dart';
 
-// ─────────────────────────────────────────────
-// Widget 1: Autocomplete search area Biteship
-// (tidak berubah — tetap fetch sendiri via Cloud Function)
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// Widget 1: BiteshipAreaSearchField
+// Autocomplete pencarian kota/kecamatan/kode pos
+// Memanggil Cloud Function searchBiteshipArea via BiteshipService
+// ─────────────────────────────────────────────────────────────────
 class BiteshipAreaSearchField extends StatefulWidget {
   final String label;
   final void Function(BiteshipArea area) onAreaSelected;
@@ -45,12 +46,13 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
   @override
   void didUpdateWidget(BiteshipAreaSearchField old) {
     super.didUpdateWidget(old);
-    // Sinkronkan jika initialArea berubah dari luar (auto-select dari provider)
     if (widget.initialArea?.id != old.initialArea?.id &&
         widget.initialArea != null) {
-      _selected = widget.initialArea;
-      _controller.text = widget.initialArea!.displayName;
-      setState(() => _suggestions = []);
+      setState(() {
+        _selected = widget.initialArea;
+        _controller.text = widget.initialArea!.displayName;
+        _suggestions = [];
+      });
     }
   }
 
@@ -69,7 +71,7 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
     try {
       final results = await _service.searchArea(query);
       if (mounted) setState(() => _suggestions = results);
-    } catch (_) {
+    } catch (e) {
       if (mounted) setState(() => _suggestions = []);
     } finally {
       if (mounted) setState(() => _isSearching = false);
@@ -85,7 +87,7 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
           controller: _controller,
           decoration: InputDecoration(
             labelText: widget.label,
-            hintText: 'Ketik min. 3 huruf, contoh: Makassar',
+            hintText: 'Ketik min. 3 huruf, contoh: Makassar atau 90234',
             border: const OutlineInputBorder(),
             suffixIcon: _isSearching
                 ? const Padding(
@@ -139,9 +141,7 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
               border: Border.all(color: Colors.grey[300]!),
               boxShadow: const [
                 BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, 2)),
+                    color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
               ],
             ),
             constraints: const BoxConstraints(maxHeight: 220),
@@ -155,8 +155,7 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
                   dense: true,
                   leading: const Icon(Icons.location_on,
                       size: 18, color: Colors.grey),
-                  title: Text(area.name,
-                      style: const TextStyle(fontSize: 14)),
+                  title: Text(area.name, style: const TextStyle(fontSize: 14)),
                   subtitle: Text(
                     '${area.adminName} • ${area.postalCode}',
                     style: const TextStyle(fontSize: 12),
@@ -178,13 +177,12 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
   }
 }
 
-// ─────────────────────────────────────────────
-// Widget 2: Daftar tarif kurir Biteship
-//
-// VERSI BARU: Baca rates dari CheckoutProvider
-// (bukan fetch sendiri) agar koordinat GPS ikut terkirim
-// dan kurir instan (GoSend/Grab) bisa muncul.
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// Widget 2: BiteshipRatesWidget
+// PENTING: Widget ini TIDAK fetch sendiri.
+// Baca rates dari CheckoutProvider via context.watch
+// sehingga koordinat GPS otomatis ikut terkirim ke Cloud Function.
+// ─────────────────────────────────────────────────────────────────
 class BiteshipRatesWidget extends StatelessWidget {
   const BiteshipRatesWidget({super.key});
 
@@ -192,7 +190,6 @@ class BiteshipRatesWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<CheckoutProvider>();
 
-    // Loading
     if (provider.isLoadingBiteshipRates) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
@@ -210,27 +207,21 @@ class BiteshipRatesWidget extends StatelessWidget {
       );
     }
 
-    // Error
     if (provider.biteshipRatesError != null) {
       return _buildError(context, provider);
     }
 
-    // Belum ada area dipilih
     if (provider.selectedDestinationArea == null) {
-      return _buildPlaceholder();
+      return _buildPlaceholder(provider);
     }
 
-    // Kosong
     if (provider.biteshipRates.isEmpty) {
       return _buildEmpty(context, provider);
     }
 
-    // Tampilkan rates
-    final rates = provider.biteshipRates;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Info area tujuan
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           margin: const EdgeInsets.only(bottom: 12),
@@ -246,8 +237,7 @@ class BiteshipRatesWidget extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Tujuan: ${provider.selectedDestinationArea!.name}',
-                  style:
-                      TextStyle(fontSize: 12, color: Colors.green[700]),
+                  style: TextStyle(fontSize: 12, color: Colors.green[700]),
                 ),
               ),
               TextButton(
@@ -263,9 +253,8 @@ class BiteshipRatesWidget extends StatelessWidget {
             ],
           ),
         ),
-
-        // Daftar kurir
-        ...rates.map((rate) => _buildRateTile(context, rate, provider)),
+        ...provider.biteshipRates
+            .map((rate) => _buildRateTile(context, rate, provider)),
       ],
     );
   }
@@ -274,8 +263,10 @@ class BiteshipRatesWidget extends StatelessWidget {
       BuildContext context, BiteshipRate rate, CheckoutProvider provider) {
     final currency =
         NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
-    final isSelected = provider.selectedBiteshipRate?.courierId == rate.courierId &&
-        provider.selectedBiteshipRate?.courierServiceCode == rate.courierServiceCode;
+    final isSelected =
+        provider.selectedBiteshipRate?.courierId == rate.courierId &&
+            provider.selectedBiteshipRate?.courierServiceCode ==
+                rate.courierServiceCode;
 
     return GestureDetector(
       onTap: () => provider.selectBiteshipRate(rate),
@@ -297,7 +288,6 @@ class BiteshipRatesWidget extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Radio
             Container(
               width: 18,
               height: 18,
@@ -324,12 +314,8 @@ class BiteshipRatesWidget extends StatelessWidget {
                   : null,
             ),
             const SizedBox(width: 10),
-
-            // Badge kategori
             _buildCategoryBadge(rate.category),
             const SizedBox(width: 8),
-
-            // Info kurir
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,21 +327,17 @@ class BiteshipRatesWidget extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      Icon(Icons.schedule,
-                          size: 11, color: Colors.grey[500]),
+                      Icon(Icons.schedule, size: 11, color: Colors.grey[500]),
                       const SizedBox(width: 3),
                       Text(
                         rate.estimatedDelivery,
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-
-            // Harga
             Text(
               currency.format(rate.price),
               style: TextStyle(
@@ -374,8 +356,8 @@ class BiteshipRatesWidget extends StatelessWidget {
     final config = switch (category) {
       'same_day' => ('INSTAN', Colors.green),
       'next_day' => ('NEXT DAY', Colors.blue),
-      'cargo'    => ('CARGO', Colors.brown),
-      _          => ('REGULER', Colors.teal),
+      'cargo' => ('CARGO', Colors.brown),
+      _ => ('REGULER', Colors.teal),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -395,7 +377,7 @@ class BiteshipRatesWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(CheckoutProvider provider) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -409,7 +391,9 @@ class BiteshipRatesWidget extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Pilih alamat tersimpan atau ketik kota tujuan untuk melihat tarif kurir.',
+              provider.userAddresses.isNotEmpty
+                  ? 'Pilih alamat tersimpan atau ketik kota tujuan untuk melihat tarif kurir.'
+                  : 'Ketik kota/kecamatan tujuan untuk melihat tarif kurir.',
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
           ),
