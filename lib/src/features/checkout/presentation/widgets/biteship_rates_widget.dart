@@ -1,584 +1,468 @@
-import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
-import '../../../core/data/firestore_service.dart';
-import '../../authentication/data/auth_service.dart';
-import '../../cart/application/cart_provider.dart' show CartProvider;
-import '../../profile/domain/address.dart';
-import '../domain/bank_account.dart';
-import '../domain/shipping_option.dart';
-import '../data/biteship_service.dart';
-import '../data/payment_service.dart';
+import '../../application/checkout_provider.dart';
+import '../../data/biteship_service.dart';
 
-class DeliveryInfo {
-  String recipientName;
-  String phoneNumber;
-  String address;
-  String city;
-  String postalCode;
-  String specialInstructions;
+// ─────────────────────────────────────────────────────────────────
+// Widget 1: BiteshipAreaSearchField
+// Autocomplete pencarian kota/kecamatan/kode pos
+// Memanggil Cloud Function searchBiteshipArea via BiteshipService
+// ─────────────────────────────────────────────────────────────────
+class BiteshipAreaSearchField extends StatefulWidget {
+  final String label;
+  final void Function(BiteshipArea area) onAreaSelected;
+  final BiteshipArea? initialArea;
 
-  DeliveryInfo({
-    this.recipientName = '',
-    this.phoneNumber = '',
-    this.address = '',
-    this.city = '',
-    this.postalCode = '',
-    this.specialInstructions = '',
+  const BiteshipAreaSearchField({
+    super.key,
+    this.label = 'Cari Kota / Kecamatan Tujuan',
+    required this.onAreaSelected,
+    this.initialArea,
   });
 
-  bool get isCompleted =>
-      recipientName.isNotEmpty &&
-      phoneNumber.isNotEmpty &&
-      address.isNotEmpty &&
-      city.isNotEmpty &&
-      postalCode.isNotEmpty;
+  @override
+  State<BiteshipAreaSearchField> createState() =>
+      _BiteshipAreaSearchFieldState();
 }
 
-class CheckoutProvider with ChangeNotifier {
-  final AuthService _authService;
-  final FirestoreService _firestoreService;
-  final CartProvider _cartProvider;
+class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
+  final _controller = TextEditingController();
+  final _service = BiteshipService();
+  List<BiteshipArea> _suggestions = [];
+  bool _isSearching = false;
+  BiteshipArea? _selected;
 
-  bool _isInitializing = true;
-  bool _isProcessingOrder = false;
-
-  List<BankAccount> _bankAccounts = [];
-  List<Address> _userAddresses = [];
-
-  final List<ShippingOption> _shippingOptions = [
-    ShippingOption(
-      id: 'pickup',
-      name: 'Ambil di Toko',
-      price: 0,
-      estimatedDays: 'Hari ini',
-      description: 'Ambil sendiri di toko, tidak ada biaya pengiriman',
-    ),
-  ];
-
-  ShippingOption? _selectedShipping;
-  String _selectedPaymentMethod = 'midtrans';
-  Address? _selectedAddress;
-  final DeliveryInfo _deliveryInfo = DeliveryInfo();
-  XFile? _paymentProofImage;
-
-  // Payment
-  final PaymentService _paymentService = PaymentService();
-  String? _midtransRedirectUrl;
-  String? _midtransToken;
-  bool _isCreatingPayment = false;
-  String? _lastOrderId;
-
-  // Biteship
-  final BiteshipService _biteshipService = BiteshipService();
-  BiteshipArea? _selectedDestinationArea;
-  List<BiteshipRate> _biteshipRates = [];
-  BiteshipRate? _selectedBiteshipRate;
-  bool _isLoadingBiteshipRates = false;
-  String? _biteshipRatesError;
-
-  // ─────────────────────────────────────────────────────────────
-  // Getters
-  // ─────────────────────────────────────────────────────────────
-  bool get isInitializing => _isInitializing;
-  bool get isProcessingOrder => _isProcessingOrder;
-  List<BankAccount> get bankAccounts => _bankAccounts;
-  List<Address> get userAddresses => _userAddresses;
-  List<ShippingOption> get shippingOptions => _shippingOptions;
-  ShippingOption? get selectedShipping => _selectedShipping;
-  String get selectedPaymentMethod => _selectedPaymentMethod;
-  Address? get selectedAddress => _selectedAddress;
-  DeliveryInfo get deliveryInfo => _deliveryInfo;
-  XFile? get paymentProofImage => _paymentProofImage;
-
-  String? get midtransRedirectUrl => _midtransRedirectUrl;
-  String? get midtransToken => _midtransToken;
-  bool get isCreatingPayment => _isCreatingPayment;
-  String? get lastOrderId => _lastOrderId;
-
-  BiteshipArea? get selectedDestinationArea => _selectedDestinationArea;
-  List<BiteshipRate> get biteshipRates => _biteshipRates;
-  BiteshipRate? get selectedBiteshipRate => _selectedBiteshipRate;
-  bool get isLoadingBiteshipRates => _isLoadingBiteshipRates;
-  String? get biteshipRatesError => _biteshipRatesError;
-
-  double get subtotal => _cartProvider.total;
-
-  double get shippingCost {
-    if (_selectedBiteshipRate != null) return _selectedBiteshipRate!.price;
-    return _selectedShipping?.price ?? 0;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialArea != null) {
+      _selected = widget.initialArea;
+      _controller.text = widget.initialArea!.displayName;
+    }
   }
 
-  double get grandTotal => subtotal + shippingCost;
-
-  // ─────────────────────────────────────────────────────────────
-  // Constructor
-  // ─────────────────────────────────────────────────────────────
-  CheckoutProvider({
-    required AuthService authService,
-    required FirestoreService firestoreService,
-    required CartProvider cartProvider,
-  })  : _authService = authService,
-        _firestoreService = firestoreService,
-        _cartProvider = cartProvider;
-
-  // ─────────────────────────────────────────────────────────────
-  // Inisialisasi
-  // ─────────────────────────────────────────────────────────────
-  Future<void> initialize() async {
-    developer.log('Initializing CheckoutProvider...', name: 'CheckoutProvider');
-    _isInitializing = true;
-    notifyListeners();
-    await _fetchBankAccounts();
-    await _fetchUserAddresses();
-    _isInitializing = false;
-    developer.log(
-      'Done. ${_userAddresses.length} addresses.',
-      name: 'CheckoutProvider',
-    );
-    notifyListeners();
-
-    // Re-fetch rates saat cart berubah
-    _cartProvider.addListener(_onCartChanged);
-  }
-
-  void _onCartChanged() {
-    if (_selectedDestinationArea != null &&
-        _biteshipRates.isEmpty &&
-        !_isLoadingBiteshipRates) {
-      fetchBiteshipRates();
+  @override
+  void didUpdateWidget(BiteshipAreaSearchField old) {
+    super.didUpdateWidget(old);
+    if (widget.initialArea?.id != old.initialArea?.id &&
+        widget.initialArea != null) {
+      setState(() {
+        _selected = widget.initialArea;
+        _controller.text = widget.initialArea!.displayName;
+        _suggestions = [];
+      });
     }
   }
 
   @override
   void dispose() {
-    _cartProvider.removeListener(_onCartChanged);
+    _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchBankAccounts() async {
+  Future<void> _search(String query) async {
+    if (query.length < 3) {
+      setState(() => _suggestions = []);
+      return;
+    }
+    setState(() => _isSearching = true);
     try {
-      _bankAccounts = await _firestoreService.getBankAccounts();
+      final results = await _service.searchArea(query);
+      if (mounted) setState(() => _suggestions = results);
     } catch (e) {
-      _bankAccounts = [];
+      if (mounted) setState(() => _suggestions = []);
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
     }
   }
 
-  Future<void> _fetchUserAddresses() async {
-    final user = _authService.currentUser;
-    if (user == null) return;
-
-    try {
-      _userAddresses = await _firestoreService.getUserAddresses(user.uid);
-      developer.log('Fetched ${_userAddresses.length} addresses.',
-          name: 'CheckoutProvider');
-
-      Address? defaultAddress;
-      try {
-        defaultAddress = _userAddresses.firstWhere((a) => a.isDefault);
-      } catch (_) {
-        if (_userAddresses.isNotEmpty) defaultAddress = _userAddresses.first;
-      }
-
-      if (defaultAddress != null) {
-        selectSavedAddress(defaultAddress);
-        // Auto-load rates untuk alamat default
-        await _loadRatesForAddress(defaultAddress);
-      }
-    } catch (e, s) {
-      _userAddresses = [];
-      developer.log('Error fetching addresses',
-          name: 'CheckoutProvider', error: e, stackTrace: s);
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Method utama: load rates untuk alamat tertentu
-  // Strategy:
-  //   1. Jika ada koordinat GPS → fetch rates by coords (lebih akurat)
-  //   2. Jika tidak ada → cari area ID dari kota, lalu fetch rates
-  // ─────────────────────────────────────────────────────────────
-  Future<void> _loadRatesForAddress(Address address) async {
-    developer.log(
-      '_loadRatesForAddress: city=${address.city}, '
-      'postalCode=${address.postalCode}, '
-      'hasCoords=${address.hasCoordinates}',
-      name: 'CheckoutProvider',
-    );
-
-    await _searchAreaAndFetchRates(
-      cityQuery: address.city,
-      destLat: address.latitude,
-      destLng: address.longitude,
-      postalCode: address.postalCode,
-    );
-  }
-
-  /// Cari area Biteship dan fetch rates sekaligus.
-  /// Mencoba beberapa variasi nama kota sampai ada yang berhasil.
-  Future<void> _searchAreaAndFetchRates({
-    required String cityQuery,
-    double? destLat,
-    double? destLng,
-    String? postalCode,
-  }) async {
-    // Bersihkan nama kota — hapus "Kota ", "Kabupaten ", dll
-    final cleanCity = cityQuery
-        .replaceAll(
-            RegExp(r'^(Kota |Kabupaten |Kab\. |Kab |Kec\. |Kec )',
-                caseSensitive: false),
-            '')
-        .trim();
-
-    // Prioritaskan kode pos karena lebih spesifik dan akurat
-    // Biteship butuh kode pos untuk dapat area ID yang tepat
-    final queries = <String>[
-      if (postalCode != null && postalCode.isNotEmpty)
-        postalCode, // ← prioritas 1
-      cleanCity, // ← prioritas 2: nama kota bersih
-      cityQuery, // ← prioritas 3: nama kota asli dari Firestore
-    ].where((q) => q.isNotEmpty && q.length >= 3).toList();
-
-    BiteshipArea? foundArea;
-
-    for (final query in queries) {
-      developer.log('Mencari area Biteship: "$query"',
-          name: 'CheckoutProvider');
-      try {
-        final areas = await _biteshipService.searchArea(query);
-        developer.log('Hasil "$query": ${areas.length} area',
-            name: 'CheckoutProvider');
-        if (areas.isNotEmpty) {
-          foundArea = areas.first;
-          developer.log('Area ditemukan: ${foundArea.name} (${foundArea.id})',
-              name: 'CheckoutProvider');
-          break;
-        }
-      } catch (e) {
-        developer.log('Error search "$query": $e', name: 'CheckoutProvider');
-      }
-    }
-
-    if (foundArea != null) {
-      _selectedDestinationArea = foundArea;
-      _selectedBiteshipRate = null;
-      _biteshipRates = [];
-      notifyListeners();
-      await fetchBiteshipRates(
-        destLat: destLat,
-        destLng: destLng,
-      );
-    } else {
-      developer.log(
-        'Area tidak ditemukan untuk: "$cityQuery" / postalCode: "$postalCode". '
-        'User perlu pilih manual via BiteshipAreaSearchField.',
-        name: 'CheckoutProvider',
-      );
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Methods — Alamat & Pengiriman
-  // ─────────────────────────────────────────────────────────────
-  void selectShippingOption(ShippingOption option) {
-    _selectedShipping = option;
-    _selectedBiteshipRate = null;
-    notifyListeners();
-  }
-
-  void selectPaymentMethod(String method) {
-    _selectedPaymentMethod = method;
-    notifyListeners();
-  }
-
-  void selectSavedAddress(Address address) {
-    _selectedAddress = address;
-    _deliveryInfo.recipientName = address.name;
-    _deliveryInfo.phoneNumber = address.phone;
-    _deliveryInfo.address = address.address;
-    _deliveryInfo.city = address.city;
-    _deliveryInfo.postalCode = address.postalCode;
-    notifyListeners();
-  }
-
-  /// Dipanggil saat user memilih alamat dari dropdown checkout.
-  /// Auto-load rates berdasarkan alamat yang dipilih.
-  Future<void> selectSavedAddressAndLoadRates(Address address) async {
-    selectSavedAddress(address);
-    _biteshipRates = [];
-    _selectedBiteshipRate = null;
-    _selectedDestinationArea = null;
-    notifyListeners();
-    await _loadRatesForAddress(address);
-  }
-
-  void clearSelectedAddress() {
-    _selectedAddress = null;
-    _deliveryInfo.recipientName = '';
-    _deliveryInfo.phoneNumber = '';
-    _deliveryInfo.address = '';
-    _deliveryInfo.city = '';
-    _deliveryInfo.postalCode = '';
-    notifyListeners();
-  }
-
-  void updateDeliveryInfo({
-    String? recipientName,
-    String? phoneNumber,
-    String? address,
-    String? city,
-    String? postalCode,
-    String? specialInstructions,
-  }) {
-    _deliveryInfo.recipientName = recipientName ?? _deliveryInfo.recipientName;
-    _deliveryInfo.phoneNumber = phoneNumber ?? _deliveryInfo.phoneNumber;
-    _deliveryInfo.address = address ?? _deliveryInfo.address;
-    _deliveryInfo.city = city ?? _deliveryInfo.city;
-    _deliveryInfo.postalCode = postalCode ?? _deliveryInfo.postalCode;
-    _deliveryInfo.specialInstructions =
-        specialInstructions ?? _deliveryInfo.specialInstructions;
-    _selectedAddress = null;
-    notifyListeners();
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Methods — Biteship
-  // ─────────────────────────────────────────────────────────────
-
-  /// Dipanggil saat user pilih area manual dari BiteshipAreaSearchField
-  void onDestinationAreaSelected(BiteshipArea area) {
-    _selectedDestinationArea = area;
-    _selectedBiteshipRate = null;
-    _biteshipRates = [];
-    _selectedShipping = null;
-    notifyListeners();
-    fetchBiteshipRates(
-      destLat: _selectedAddress?.latitude,
-      destLng: _selectedAddress?.longitude,
-    );
-  }
-
-  /// Fallback: search area dari nama kota (dipanggil jika tidak ada koordinat)
-  Future<void> searchAndSetBiteshipAreaFromCity(String cityName) async {
-    await _searchAreaAndFetchRates(cityQuery: cityName);
-  }
-
-  /// Fetch tarif Biteship.
-  /// [destLat] dan [destLng] opsional — jika ada, kurir instan ikut muncul.
-  Future<void> fetchBiteshipRates({
-    double? destLat,
-    double? destLng,
-  }) async {
-    if (_selectedDestinationArea == null) return;
-
-    // Gunakan koordinat dari parameter atau dari alamat tersimpan
-    final lat = destLat ?? _selectedAddress?.latitude;
-    final lng = destLng ?? _selectedAddress?.longitude;
-    final hasCoords = lat != null && lng != null;
-
-    developer.log(
-      'fetchBiteshipRates: area=${_selectedDestinationArea!.id}, '
-      'cartItems=${_cartProvider.items.length}, '
-      'hasCoords=$hasCoords',
-      name: 'CheckoutProvider',
-    );
-
-    _isLoadingBiteshipRates = true;
-    _biteshipRatesError = null;
-    notifyListeners();
-
-    final shipmentItems = _cartProvider.items.isNotEmpty
-        ? _cartProvider.items
-            .map((item) => ShipmentItem(
-                  productId: item.productId,
-                  name: item.nama,
-                  price: item.harga,
-                  quantity: item.quantity,
-                  weightGram: 200,
-                ))
-            .toList()
-        : [
-            ShipmentItem(
-              productId: 'default',
-              name: 'Paket',
-              price: 50000,
-              quantity: 1,
-              weightGram: 500,
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            hintText: 'Ketik min. 3 huruf, contoh: Makassar atau 90234',
+            border: const OutlineInputBorder(),
+            suffixIcon: _isSearching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : _selected != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _controller.clear();
+                          setState(() {
+                            _selected = null;
+                            _suggestions = [];
+                          });
+                        },
+                      )
+                    : const Icon(Icons.search),
+          ),
+          onChanged: (v) {
+            setState(() => _selected = null);
+            _search(v);
+          },
+        ),
+        if (_selected != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _selected!.displayName,
+                    style: TextStyle(fontSize: 12, color: Colors.green[700]),
+                  ),
+                ),
+              ],
             ),
-          ];
+          ),
+        if (_suggestions.isNotEmpty && _selected == null)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+              boxShadow: const [
+                BoxShadow(
+                    color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+              ],
+            ),
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _suggestions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final area = _suggestions[i];
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.location_on,
+                      size: 18, color: Colors.grey),
+                  title: Text(area.name, style: const TextStyle(fontSize: 14)),
+                  subtitle: Text(
+                    '${area.adminName} • ${area.postalCode}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _selected = area;
+                      _suggestions = [];
+                      _controller.text = area.displayName;
+                    });
+                    widget.onAreaSelected(area);
+                  },
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
 
-    try {
-      _biteshipRates = await _biteshipService.getRates(
-        destinationAreaId: _selectedDestinationArea!.id,
-        items: shipmentItems,
-        destinationLatitude: lat,
-        destinationLongitude: lng,
+// ─────────────────────────────────────────────────────────────────
+// Widget 2: BiteshipRatesWidget
+// PENTING: Widget ini TIDAK fetch sendiri.
+// Baca rates dari CheckoutProvider via context.watch
+// sehingga koordinat GPS otomatis ikut terkirim ke Cloud Function.
+// ─────────────────────────────────────────────────────────────────
+class BiteshipRatesWidget extends StatelessWidget {
+  const BiteshipRatesWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<CheckoutProvider>();
+
+    if (provider.isLoadingBiteshipRates) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text('Mengambil tarif kurir...',
+                  style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+        ),
       );
-      developer.log(
-        'Biteship rates: ${_biteshipRates.length} layanan',
-        name: 'CheckoutProvider',
-      );
-    } on BiteshipException catch (e) {
-      _biteshipRatesError = e.message;
-      _biteshipRates = [];
-      developer.log('Biteship error',
-          name: 'CheckoutProvider', error: e.message);
-    } finally {
-      _isLoadingBiteshipRates = false;
-      notifyListeners();
-    }
-  }
-
-  void selectBiteshipRate(BiteshipRate rate) {
-    _selectedBiteshipRate = rate;
-    _selectedShipping = null;
-    notifyListeners();
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Methods — Bukti bayar
-  // ─────────────────────────────────────────────────────────────
-  Future<void> pickPaymentProof() async {
-    try {
-      final XFile? image = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-      );
-      if (image != null) {
-        _paymentProofImage = image;
-        notifyListeners();
-      }
-    } catch (e) {
-      developer.log('Error picking payment proof',
-          name: 'CheckoutProvider', error: e);
-    }
-  }
-
-  void removePaymentProof() {
-    _paymentProofImage = null;
-    notifyListeners();
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Methods — Proses order
-  // ─────────────────────────────────────────────────────────────
-  Future<String?> processOrder() async {
-    final user = _authService.currentUser;
-    if (user == null ||
-        !_deliveryInfo.isCompleted ||
-        _cartProvider.items.isEmpty) {
-      return 'Formulir tidak lengkap atau keranjang kosong.';
     }
 
-    _isProcessingOrder = true;
-    notifyListeners();
-
-    final String newOrderId = _firestoreService.getNewOrderId();
-
-    try {
-      final now = DateTime.now();
-
-      String paymentProofUrl = '';
-      if (_paymentProofImage != null) {
-        paymentProofUrl = await _firestoreService.uploadPaymentProof(
-          user.uid,
-          newOrderId,
-          _paymentProofImage!,
-        );
-      }
-
-      String shippingMethodName = _selectedShipping?.name ?? '';
-      if (_selectedBiteshipRate != null) {
-        shippingMethodName =
-            '${_selectedBiteshipRate!.courierName} ${_selectedBiteshipRate!.serviceName}';
-      }
-
-      final orderData = {
-        'created_at': now.toUtc().toIso8601String(),
-        'updated_at': now.toUtc().toIso8601String(),
-        'date': now,
-        'stockUpdateTimestamp': now.toUtc().toIso8601String(),
-        'customer': _deliveryInfo.recipientName,
-        'customerId': user.uid,
-        'customerDetails': {
-          'name': _deliveryInfo.recipientName,
-          'address':
-              '${_deliveryInfo.address}, ${_deliveryInfo.city}, ${_deliveryInfo.postalCode}',
-          'whatsapp': _deliveryInfo.phoneNumber,
-        },
-        if (_selectedAddress?.latitude != null)
-          'destinationLatitude': _selectedAddress!.latitude,
-        if (_selectedAddress?.longitude != null)
-          'destinationLongitude': _selectedAddress!.longitude,
-        'products': _cartProvider.items
-            .map((item) => {
-                  'productId': item.productId,
-                  'name': item.nama,
-                  'price': item.harga,
-                  'quantity': item.quantity,
-                  'image': item.gambar,
-                })
-            .toList(),
-        'productIds': _cartProvider.items.map((e) => e.productId).toList(),
-        'paymentMethod': _selectedPaymentMethod,
-        'paymentStatus': _paymentProofImage != null ? 'Paid' : 'Unpaid',
-        'paymentProofUrl': paymentProofUrl,
-        'paymentProofFileName': _paymentProofImage?.name ?? '',
-        'paymentProofId': '',
-        'paymentProofUploaded': _paymentProofImage != null,
-        'shippingMethod': shippingMethodName,
-        'shippingFee': shippingCost,
-        if (_selectedBiteshipRate != null) ...{
-          'biteshipCourierCode': _selectedBiteshipRate!.courierId,
-          'biteshipServiceCode': _selectedBiteshipRate!.courierServiceCode,
-          'biteshipCourierName': _selectedBiteshipRate!.courierName,
-          'biteshipServiceName': _selectedBiteshipRate!.serviceName,
-          'destinationAreaId': _selectedDestinationArea?.id ?? '',
-        },
-        'subtotal': subtotal,
-        'total': grandTotal,
-        'status': 'Pending',
-        'stockUpdated': true,
-      };
-
-      final itemsToUpdate = _cartProvider.items
-          .map((i) => {'productId': i.productId, 'quantity': i.quantity})
-          .toList();
-
-      await _firestoreService.placeOrderInTransaction(
-          newOrderId, orderData, itemsToUpdate);
-
-      _lastOrderId = newOrderId;
-      await _cartProvider.clearCart();
-      return null;
-    } catch (e) {
-      developer.log('Error processing order',
-          name: 'CheckoutProvider', error: e);
-      return e.toString();
-    } finally {
-      _isProcessingOrder = false;
-      notifyListeners();
+    if (provider.biteshipRatesError != null) {
+      return _buildError(context, provider);
     }
+
+    if (provider.selectedDestinationArea == null) {
+      return _buildPlaceholder(provider);
+    }
+
+    if (provider.biteshipRates.isEmpty) {
+      return _buildEmpty(context, provider);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.location_on, size: 14, color: Colors.green[700]),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Tujuan: ${provider.selectedDestinationArea!.name}',
+                  style: TextStyle(fontSize: 12, color: Colors.green[700]),
+                ),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => provider.fetchBiteshipRates(),
+                child: Text('Refresh',
+                    style: TextStyle(fontSize: 11, color: Colors.green[700])),
+              ),
+            ],
+          ),
+        ),
+        ...provider.biteshipRates
+            .map((rate) => _buildRateTile(context, rate, provider)),
+      ],
+    );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Methods — Midtrans
-  // ─────────────────────────────────────────────────────────────
-  Future<String?> createMidtransPayment(String orderId) async {
-    _isCreatingPayment = true;
-    notifyListeners();
-    try {
-      final result = await _paymentService.createTransaction(orderId);
-      _midtransToken = result.token;
-      _midtransRedirectUrl = result.redirectUrl;
-      notifyListeners();
-      return null;
-    } on PaymentException catch (e) {
-      return e.message;
-    } finally {
-      _isCreatingPayment = false;
-      notifyListeners();
-    }
+  Widget _buildRateTile(
+      BuildContext context, BiteshipRate rate, CheckoutProvider provider) {
+    final currency =
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final isSelected =
+        provider.selectedBiteshipRate?.courierId == rate.courierId &&
+            provider.selectedBiteshipRate?.courierServiceCode ==
+                rate.courierServiceCode;
+
+    return GestureDetector(
+      onTap: () => provider.selectBiteshipRate(rate),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.07)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey[200]!,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey[400]!,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? Center(
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            _buildCategoryBadge(rate.category),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${rate.courierName} ${rate.serviceName}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Row(
+                    children: [
+                      Icon(Icons.schedule, size: 11, color: Colors.grey[500]),
+                      const SizedBox(width: 3),
+                      Text(
+                        rate.estimatedDelivery,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              currency.format(rate.price),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryBadge(String category) {
+    final config = switch (category) {
+      'same_day' => ('INSTAN', Colors.green),
+      'next_day' => ('NEXT DAY', Colors.blue),
+      'cargo' => ('CARGO', Colors.brown),
+      _ => ('REGULER', Colors.teal),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: config.$2.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: config.$2.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        config.$1,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: config.$2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(CheckoutProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.local_shipping_outlined, color: Colors.grey[400]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              provider.userAddresses.isNotEmpty
+                  ? 'Pilih alamat tersimpan atau ketik kota tujuan untuk melihat tarif kurir.'
+                  : 'Ketik kota/kecamatan tujuan untuk melihat tarif kurir.',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(BuildContext context, CheckoutProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.red[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.red[400], size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  provider.biteshipRatesError!,
+                  style: TextStyle(color: Colors.red[700], fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          TextButton(
+            onPressed: () => provider.fetchBiteshipRates(),
+            child: const Text('Coba Lagi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty(BuildContext context, CheckoutProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange[700]),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Tidak ada layanan kurir tersedia untuk rute ini.',
+                  style: TextStyle(color: Colors.orange[800], fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          TextButton(
+            onPressed: () => provider.fetchBiteshipRates(),
+            child: const Text('Coba Lagi'),
+          ),
+        ],
+      ),
+    );
   }
 }
