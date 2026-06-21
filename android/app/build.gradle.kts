@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -8,8 +10,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Corrected logic to read properties
+val keyProperties = Properties()
+// The key.properties file is located in the `android` folder, which is the rootProject for this gradle build.
+val keyPropertiesFile = rootProject.file("key.properties") 
+if (keyPropertiesFile.exists()) {
+    keyPropertiesFile.inputStream().use { input ->
+        keyProperties.load(input)
+    }
+}
+
 android {
-    namespace = "com.example.myapp"
+    namespace = "Store.gallery.pos"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -18,12 +30,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    signingConfigs {
+        create("release") {
+            // The keystore file is in `android/app`
+            val storeFilePath = keyProperties.getProperty("storeFile")
+            if (storeFilePath != null) {
+                storeFile = rootProject.file("app/$storeFilePath")
+            }
+            storePassword = keyProperties.getProperty("storePassword")
+            keyAlias = keyProperties.getProperty("keyAlias")
+            keyPassword = keyProperties.getProperty("keyPassword")
+        }
+    }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.myapp"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "Store.gallery.pos"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -32,17 +53,27 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Pakai debug signing agar SHA-1 yang sudah didaftarkan
+            // di Firebase Console tetap cocok dengan APK release
+            signingConfig = signingConfigs.getByName("debug")
+
+            // Nonaktifkan minify dulu untuk mempermudah debugging
+            // Aktifkan kembali setelah Firebase Functions berjalan normal
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+        debug {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
+
 flutter {
     source = "../.."
 }
