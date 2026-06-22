@@ -72,6 +72,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
+
   // ── Buka Midtrans untuk bayar ─────────────────────────────────
   void _openPayment() {
     final url = _order.midtransRedirectUrl;
@@ -698,8 +699,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         return 'Menunggu Pembayaran';
       case 'cancelled':
         return 'Dibatalkan';
+<<<<<<< HEAD
       case 'failed':
         return 'Kadaluarsa';
+=======
+>>>>>>> ea8dce1 (update)
       case 'unpaid':
         return 'Belum Bayar';
       default:
@@ -715,10 +719,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       case 'pending_payment':
         return Colors.orange;
       case 'cancelled':
+<<<<<<< HEAD
       case 'failed':
+=======
+>>>>>>> ea8dce1 (update)
         return Colors.red;
       default:
         return Colors.grey;
     }
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> ea8dce1 (update)

@@ -12,7 +12,20 @@
           "package_name": "Store.gallery.pos"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "889047904404-lrkikjror1f9th28jjt9q184nlb8jss3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "Store.gallery.pos",
+            "certificate_hash": "eeceef5efe53def2cecd072280caeccaf5b6022f"
+          }
+        },
+        {
+          "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "889047904404-a9ishiu92kdntvugpbojse5ab2c4ekog.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "store.gogama.myapp"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +56,12 @@
           "package_name": "com.example.myapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
@@ -39,7 +69,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "889047904404-a9ishiu92kdntvugpbojse5ab2c4ekog.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "store.gogama.myapp"
+              }
+            }
+          ]
         }
       }
     },
@@ -50,7 +92,12 @@
           "package_name": "store.gallerymakassar.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
@@ -58,7 +105,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "889047904404-a9ishiu92kdntvugpbojse5ab2c4ekog.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "store.gogama.myapp"
+              }
+            }
+          ]
         }
       }
     },
@@ -69,7 +128,20 @@
           "package_name": "store.gogama.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "889047904404-9e979in9kefg8cijji21a5kmr4di4cms.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "store.gogama.app",
+            "certificate_hash": "cb55e28f82b7ad04803154626d3823e84d497b08"
+          }
+        },
+        {
+          "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
@@ -77,7 +149,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "889047904404-a9ishiu92kdntvugpbojse5ab2c4ekog.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "store.gogama.myapp"
+              }
+            }
+          ]
         }
       }
     }
