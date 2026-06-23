@@ -39,10 +39,37 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         .doc(_order.id)
         .snapshots()
         .listen((doc) {
-      if (doc.exists && mounted) {
-        setState(() => _order = Order.fromFirestore(doc));
+      if (!doc.exists || !mounted) return;
+      final updated = Order.fromFirestore(doc);
+      final wasWaitingPayment = _order.isPendingPayment;
+      setState(() => _order = updated);
+      if (wasWaitingPayment && updated.paymentStatus == 'failed') {
+        _showExpiredDialog();
       }
     });
+  }
+
+  void _showExpiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pembayaran Kadaluarsa'),
+        content: const Text(
+          'Batas waktu pembayaran telah habis. Pesanan ini telah dibatalkan secara otomatis.',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.pop();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Buka Midtrans untuk bayar ─────────────────────────────────
@@ -671,6 +698,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         return 'Menunggu Pembayaran';
       case 'cancelled':
         return 'Dibatalkan';
+      case 'failed':
+        return 'Kadaluarsa';
       case 'unpaid':
         return 'Belum Bayar';
       default:
@@ -686,6 +715,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       case 'pending_payment':
         return Colors.orange;
       case 'cancelled':
+      case 'failed':
         return Colors.red;
       default:
         return Colors.grey;

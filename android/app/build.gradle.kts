@@ -53,12 +53,8 @@ android {
 
     buildTypes {
         release {
-            // Pakai debug signing agar SHA-1 yang sudah didaftarkan
-            // di Firebase Console tetap cocok dengan APK release
-            signingConfig = signingConfigs.getByName("debug")
-
-            // Nonaktifkan minify dulu untuk mempermudah debugging
-            // Aktifkan kembali setelah Firebase Functions berjalan normal
+            // Pakai gogama-release.keystore untuk APK release
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
         }
