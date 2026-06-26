@@ -608,7 +608,7 @@ class CheckoutProvider with ChangeNotifier {
         },
         'subtotal': subtotal,
         'total': grandTotal,
-        'status': 'Pending',
+        'status': _selectedPaymentMethod == 'cod' ? 'Processing' : 'Pending',
         'stockUpdated': true,
       };
 

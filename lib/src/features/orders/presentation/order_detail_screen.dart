@@ -234,7 +234,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             _buildSection('Informasi Pesanan', [
               _buildInfoRow('ID Pesanan', '#${_order.id}'),
               _buildInfoRow('Tanggal', _order.formattedDate),
-              _buildInfoRow('Metode Bayar', _order.paymentMethod),
+              _buildInfoRow('Metode Bayar', _paymentMethodLabel(_order.paymentMethod)),
               _buildInfoRow(
                 'Status Bayar',
                 _paymentLabel(_order.paymentStatus),
@@ -256,6 +256,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             _buildProductsSection(),
             const SizedBox(height: 12),
             _buildTotalSection(),
+            if (['shipped', 'dikirim']
+                .contains(_order.status.toLowerCase())) ...[
+              const SizedBox(height: 16),
+              _buildComplaintButton(),
+            ],
             const SizedBox(height: 32),
           ],
         ),
@@ -460,7 +465,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               children: [
                 const Icon(Icons.location_on, size: 18),
                 const SizedBox(width: 6),
-                const Text('Riwayat Tracking',
+                const Text('Lacak Paket',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const Spacer(),
@@ -648,6 +653,48 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
+  // ── Tombol Ajukan Komplain (hanya status shipped) ─────────────
+  Widget _buildComplaintButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.report_problem_outlined, color: Colors.orange),
+        label: const Text(
+          'Ajukan Komplain',
+          style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: const BorderSide(color: Colors.orange),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        onPressed: _openComplaintWhatsApp,
+      ),
+    );
+  }
+
+  Future<void> _openComplaintWhatsApp() async {
+    final recipientName =
+        _order.customerDetails['name'] ?? '';
+    final message = Uri.encodeComponent(
+      'Nomor Pesanan : ${_order.id}\n'
+      'Jenis Komplain : \n'
+      'Nama Penerima : $recipientName\n\n'
+      'Note: Sertakan video unboxing jika produk kurang atau bermasalah.',
+    );
+    final uri = Uri.parse('https://wa.me/6282345881931?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka WhatsApp.')),
+        );
+      }
+    }
+  }
+
   Widget _buildSection(String title, List<Widget> rows) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -688,6 +735,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         ],
       ),
     );
+  }
+
+  String _paymentMethodLabel(String pm) {
+    switch (pm.toLowerCase()) {
+      case 'midtrans':
+        return 'Online (Midtrans)';
+      case 'cod':
+        return 'Bayar di Tempat (COD)';
+      case 'bank_transfer':
+        return 'Transfer Bank';
+      default:
+        return pm;
+    }
   }
 
   String _paymentLabel(String ps) {

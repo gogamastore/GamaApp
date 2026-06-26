@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:provider/provider.dart';
@@ -9,21 +10,16 @@ import '../../authentication/data/auth_service.dart';
 import '../domain/order.dart';
 
 // ─────────────────────────────────────────────────────────────────
-// Tab query logic:
+// Satu Firestore listener → semua order user → filter client-side
 //
+// Tab filtering:
 //   "Belum Bayar"  → paymentStatus == 'pending_payment'
-//                    (otomatis hilang setelah 24 jam expire via webhook
-//                     Midtrans + Cloud Function checkExpiredOrders sweeper)
-//
-//   "Belum Proses" → status IN ['Pending','pending']
-//   "Diproses"     → status IN ['Processing','processing']
-//   "Dikirim"      → status IN ['Shipped','shipped']
-//   "Selesai"      → status IN ['Delivered','delivered']
-//
+//   "Diproses"     → status == 'processing'
+//   "Dikirim"      → status IN ['shipped','dikirim']
+//   "Selesai"      → status IN ['delivered','selesai']
 //   "Dibatalkan"   → paymentStatus IN ['cancelled','failed']
-//                    'cancelled' = dibatalkan user
-//                    'failed'    = expire 24 jam (webhook Midtrans/sweeper)
-//
+//                    ATAU status IN ['cancelled','dibatalkan']
+//                    (menangkap pembatalan dari Biteship webhook)
 //   "Semua"        → tanpa filter
 // ─────────────────────────────────────────────────────────────────
 
@@ -38,10 +34,12 @@ class OrderHistoryScreen extends StatefulWidget {
 class _OrderHistoryScreenState extends State<OrderHistoryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  List<Order> _orders = [];
+  bool _loading = true;
+  StreamSubscription<QuerySnapshot>? _sub;
 
   static const _tabs = [
     _Tab('Belum Bayar', 'pending_payment'),
-    _Tab('Belum Proses', 'pending'),
     _Tab('Diproses', 'processing'),
     _Tab('Dikirim', 'shipped'),
     _Tab('Selesai', 'delivered'),
@@ -53,7 +51,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen>
   void initState() {
     super.initState();
     initializeDateFormatting('id_ID');
-    int initialIndex = 1;
+    int initialIndex = 0;
     if (widget.initialTab != null) {
       final idx = _tabs.indexWhere((t) => t.key == widget.initialTab);
       if (idx >= 0) initialIndex = idx;
@@ -63,100 +61,74 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_sub == null) _setupListener();
+  }
+
+  void _setupListener() {
+    final userId = context.read<AuthService>().currentUser?.uid;
+    if (userId == null) {
+      setState(() => _loading = false);
+      return;
+    }
+
+    _sub = FirebaseFirestore.instance
+        .collection('orders')
+        .where('customerId', isEqualTo: userId)
+        .orderBy('date', descending: true)
+        .snapshots()
+        .listen((snap) {
+      if (mounted) {
+        setState(() {
+          _orders = snap.docs.map((d) => Order.fromFirestore(d)).toList();
+          _loading = false;
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _sub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final userId = context.read<AuthService>().currentUser?.uid;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Riwayat Pesanan'),
-        elevation: 1,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: _tabs.map((t) => Tab(text: t.label)).toList(),
-          indicatorColor: Theme.of(context).colorScheme.primary,
-          labelColor: Theme.of(context).colorScheme.primary,
-          unselectedLabelColor: Colors.grey[600],
-          labelStyle:
-              const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-        ),
-      ),
-      body: userId == null
-          ? const Center(child: Text('Silakan login.'))
-          : TabBarView(
-              controller: _tabController,
-              children: _tabs
-                  .map((t) => _OrderListTab(userId: userId, tabKey: t.key))
-                  .toList(),
-            ),
-    );
-  }
-}
-
-class _Tab {
-  final String label;
-  final String key;
-  const _Tab(this.label, this.key);
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Widget list per-tab
-// ─────────────────────────────────────────────────────────────────
-class _OrderListTab extends StatelessWidget {
-  final String userId;
-  final String tabKey;
-  const _OrderListTab({required this.userId, required this.tabKey});
-
-  Query _buildQuery() {
-    final base = FirebaseFirestore.instance
-        .collection('orders')
-        .where('customerId', isEqualTo: userId)
-        .orderBy('date', descending: true);
-
+  List<Order> _filterOrders(String tabKey) {
     switch (tabKey) {
       case 'pending_payment':
-        // Belum Bayar — otomatis bersih setelah webhook expire (24 jam)
-        return FirebaseFirestore.instance
-            .collection('orders')
-            .where('customerId', isEqualTo: userId)
-            .where('paymentStatus', isEqualTo: 'pending_payment')
-            .orderBy('date', descending: true);
-
-      case 'pending':
-        return base.where('status', whereIn: ['Pending', 'pending']);
+        return _orders
+            .where((o) => o.paymentStatus.toLowerCase() == 'pending_payment')
+            .toList();
       case 'processing':
-        return base.where('status', whereIn: ['Processing', 'processing']);
+        return _orders
+            .where((o) => o.status.toLowerCase() == 'processing')
+            .toList();
       case 'shipped':
-        return base.where('status', whereIn: ['Shipped', 'shipped']);
+        return _orders
+            .where((o) => ['shipped', 'dikirim'].contains(o.status.toLowerCase()))
+            .toList();
       case 'delivered':
-        return base.where('status', whereIn: ['Delivered', 'delivered']);
-
+        return _orders
+            .where((o) => ['delivered', 'selesai'].contains(o.status.toLowerCase()))
+            .toList();
       case 'cancelled':
-        // Dibatalkan: mencakup cancelled (user) DAN failed (expire Midtrans)
-        return FirebaseFirestore.instance
-            .collection('orders')
-            .where('customerId', isEqualTo: userId)
-            .where('paymentStatus', whereIn: ['cancelled', 'failed']).orderBy(
-                'date',
-                descending: true);
-
+        return _orders.where((o) {
+          final ps = o.paymentStatus.toLowerCase();
+          final st = o.status.toLowerCase();
+          return ['cancelled', 'failed'].contains(ps) ||
+              ['cancelled', 'dibatalkan'].contains(st);
+        }).toList();
       default:
-        return base;
+        return _orders;
     }
   }
 
-  String get _emptyMessage {
+  String _emptyMessage(String tabKey) {
     switch (tabKey) {
       case 'pending_payment':
         return 'Tidak ada pesanan yang menunggu pembayaran.';
-      case 'pending':
-        return 'Tidak ada pesanan yang belum diproses.';
       case 'processing':
         return 'Tidak ada pesanan yang sedang diproses.';
       case 'shipped':
@@ -172,38 +144,106 @@ class _OrderListTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _buildQuery().snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.receipt_long_outlined,
-                    size: 80, color: Colors.grey[300]),
-                const SizedBox(height: 16),
-                Text(_emptyMessage,
-                    style: TextStyle(fontSize: 15, color: Colors.grey[500]),
-                    textAlign: TextAlign.center),
-              ],
-            ),
-          );
-        }
-        final orders =
-            snapshot.data!.docs.map((doc) => Order.fromFirestore(doc)).toList();
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: orders.length,
-          itemBuilder: (_, i) => _OrderCard(order: orders[i]),
-        );
-      },
+    final userId = context.read<AuthService>().currentUser?.uid;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Riwayat Pesanan'),
+        elevation: 1,
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: _tabs.map((t) {
+            final count = _filterOrders(t.key).length;
+            return Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(t.label),
+                  if (count > 0) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+          indicatorColor: Theme.of(context).colorScheme.primary,
+          labelColor: Theme.of(context).colorScheme.primary,
+          unselectedLabelColor: Colors.grey[600],
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+      ),
+      body: userId == null
+          ? const Center(child: Text('Silakan login.'))
+          : _loading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                  controller: _tabController,
+                  children: _tabs.map((t) {
+                    final filtered = _filterOrders(t.key);
+                    return _OrderListView(
+                      orders: filtered,
+                      emptyMessage: _emptyMessage(t.key),
+                    );
+                  }).toList(),
+                ),
+    );
+  }
+}
+
+class _Tab {
+  final String label;
+  final String key;
+  const _Tab(this.label, this.key);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// List view per-tab (menerima list yang sudah difilter)
+// ─────────────────────────────────────────────────────────────────
+class _OrderListView extends StatelessWidget {
+  final List<Order> orders;
+  final String emptyMessage;
+  const _OrderListView({required this.orders, required this.emptyMessage});
+
+  @override
+  Widget build(BuildContext context) {
+    if (orders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.receipt_long_outlined,
+                size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(emptyMessage,
+                style: TextStyle(fontSize: 15, color: Colors.grey[500]),
+                textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: orders.length,
+      itemBuilder: (_, i) => _OrderCard(order: orders[i]),
     );
   }
 }
@@ -323,17 +363,17 @@ class _OrderCard extends StatelessWidget {
     String label;
     if (s == 'pending') {
       color = Colors.orange;
-      label = 'Belum Proses';
+      label = 'Menunggu';
     } else if (s == 'processing') {
       color = Colors.blue;
       label = 'Diproses';
-    } else if (s == 'shipped') {
+    } else if (s == 'shipped' || s == 'dikirim') {
       color = Colors.lightGreen;
       label = 'Dikirim';
-    } else if (s == 'delivered') {
+    } else if (s == 'delivered' || s == 'selesai') {
       color = Colors.green;
       label = 'Selesai';
-    } else if (s == 'cancelled') {
+    } else if (s == 'cancelled' || s == 'dibatalkan') {
       color = Colors.red;
       label = 'Dibatalkan';
     } else {
@@ -363,6 +403,10 @@ class _OrderCard extends StatelessWidget {
       case 'failed':
         color = Colors.red;
         label = 'Kadaluarsa';
+        break;
+      case 'unpaid':
+        color = Colors.amber[700]!;
+        label = 'Belum Lunas';
         break;
       default:
         color = Colors.grey;

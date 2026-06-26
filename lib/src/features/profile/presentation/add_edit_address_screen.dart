@@ -19,13 +19,14 @@ class AddEditAddressScreen extends StatefulWidget {
 
 class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   final _formKey = GlobalKey<FormState>();
-  late String _label, _name, _phone, _postalCode, _province;
+  late String _label, _name, _postalCode, _province;
   late bool _isDefault;
   bool _isLoading = false;
 
   // Controller untuk field yang bisa diisi dari Maps
   late TextEditingController _addressController;
   late TextEditingController _cityController;
+  late TextEditingController _phoneController;
 
   // ── Koordinat GPS ─────────────────────────────────────────────
   double? _latitude;
@@ -43,7 +44,6 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
     super.initState();
     _label = widget.address?.label ?? '';
     _name = widget.address?.name ?? '';
-    _phone = widget.address?.phone ?? '';
     _province = widget.address?.province ?? '';
     _postalCode = widget.address?.postalCode ?? '';
     _isDefault = widget.address?.isDefault ?? false;
@@ -51,6 +51,12 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
     _addressController =
         TextEditingController(text: widget.address?.address ?? '');
     _cityController = TextEditingController(text: widget.address?.city ?? '');
+    // Default "62" untuk nomor baru; edit pakai nilai yang sudah ada
+    _phoneController = TextEditingController(
+      text: widget.address?.phone.isNotEmpty == true
+          ? widget.address!.phone
+          : '62',
+    );
 
     // Jika edit dan sudah ada koordinat, tandai sudah dipilih
     if (widget.address?.hasCoordinates == true) {
@@ -74,6 +80,7 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   void dispose() {
     _addressController.dispose();
     _cityController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -138,7 +145,7 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       id: _isEditing ? widget.address!.id : '',
       label: _label,
       name: _name,
-      phone: _phone,
+      phone: _phoneController.text.trim(),
       address: _addressController.text.trim(),
       city: _cityController.text.trim(),
       province: _province,
@@ -293,18 +300,27 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
             const SizedBox(height: 16),
 
             TextFormField(
-              initialValue: _phone,
+              controller: _phoneController,
               decoration: const InputDecoration(
                 labelText: 'Nomor Telepon / WhatsApp',
                 hintText: '628xxxxxxxxxx',
+                helperText: 'Awali dengan 62 (kode negara Indonesia)',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.phone_outlined),
               ),
               keyboardType: TextInputType.phone,
-              onSaved: (v) => _phone = v ?? '',
-              validator: (v) => (v == null || v.isEmpty)
-                  ? 'Nomor telepon tidak boleh kosong'
-                  : null,
+              validator: (v) {
+                if (v == null || v.isEmpty) {
+                  return 'Nomor telepon tidak boleh kosong';
+                }
+                if (!v.startsWith('62')) {
+                  return 'Nomor harus diawali dengan 62 (contoh: 628123456789)';
+                }
+                if (v.length < 10) {
+                  return 'Nomor terlalu pendek';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 16),
 

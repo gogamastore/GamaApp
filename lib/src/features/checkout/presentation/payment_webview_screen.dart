@@ -26,7 +26,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// Cloud Function checkExpiredOrders (scheduled) sebagai backup sweeper.
 ///
 /// Skenario:
-///   paymentStatus = 'paid'            → Tab "Belum Proses"
+///   paymentStatus = 'paid'            → Tab "Diproses"
 ///   paymentStatus = 'pending_payment' → tetap menunggu
 ///   paymentStatus = 'failed'/'cancelled' → Tab "Dibatalkan"
 ///   User tutup manual                 → paymentStatus = 'pending_payment'
@@ -229,7 +229,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
         message:
             'Terima kasih! Pesanan Anda sudah dibayar dan sedang menunggu diproses.',
         buttonLabel: 'Lihat Pesanan',
-        onDismiss: () => context.go('/profile/orders?tab=pending'),
+        onDismiss: () => context.go('/profile/orders?tab=processing'),
       );
     });
   }

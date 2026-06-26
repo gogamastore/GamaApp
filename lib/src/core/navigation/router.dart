@@ -115,7 +115,9 @@ class AppRouter {
                   GoRoute(
                     path: 'orders',
                     name: 'orderHistory',
-                    builder: (context, state) => const OrderHistoryScreen(),
+                    builder: (context, state) => OrderHistoryScreen(
+                      initialTab: state.uri.queryParameters['tab'],
+                    ),
                   ),
                   GoRoute(
                     path: 'address',
