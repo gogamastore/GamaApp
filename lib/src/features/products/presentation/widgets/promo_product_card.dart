@@ -27,8 +27,9 @@ class PromoProductCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          final productWithDiscount = product.copyWith(price: discountedPrice);
-          context.push('/product/${product.id}', extra: productWithDiscount);
+          // Kirim produk dengan harga ASLI; halaman detail menampilkan diskon
+          // via PromotionProvider (harga coret + badge persen).
+          context.push('/product/${product.id}', extra: product);
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

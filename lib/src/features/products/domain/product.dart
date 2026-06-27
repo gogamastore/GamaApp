@@ -8,6 +8,8 @@ class Product {
   final String imageUrl;
   final String category;
   final int stock;
+  final int weightGram;
+  final String sku;
 
   Product({
     required this.id,
@@ -17,6 +19,8 @@ class Product {
     required this.imageUrl,
     required this.category,
     required this.stock,
+    this.weightGram = 0,
+    this.sku = '',
   });
 
   // --- LOGIKA BARU DIMULAI DI SINI ---
@@ -28,6 +32,8 @@ class Product {
     String? imageUrl,
     String? category,
     int? stock,
+    int? weightGram,
+    String? sku,
   }) {
     return Product(
       id: id ?? this.id,
@@ -37,6 +43,8 @@ class Product {
       imageUrl: imageUrl ?? this.imageUrl,
       category: category ?? this.category,
       stock: stock ?? this.stock,
+      weightGram: weightGram ?? this.weightGram,
+      sku: sku ?? this.sku,
     );
   }
   // --- LOGIKA BARU BERAKHIR DI SINI ---
@@ -50,6 +58,8 @@ class Product {
       'image': imageUrl,
       'category': category,
       'stock': stock,
+      'weightGram': weightGram,
+      'sku': sku,
     };
   }
 
@@ -76,6 +86,8 @@ class Product {
       imageUrl: map['image'] as String? ?? '',
       category: map['category'] as String? ?? 'Lain-lain',
       stock: (map['stock'] as num? ?? 0).toInt(),
+      weightGram: (map['weightGram'] as num? ?? 0).toInt(),
+      sku: map['sku'] as String? ?? '',
     );
   }
 

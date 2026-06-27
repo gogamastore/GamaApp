@@ -400,7 +400,7 @@ export const createBiteshipOrder = onCall(
           length: 10,
           width: 10,
           height: 10,
-          weight: 200,
+          weight: p.weightGram && p.weightGram > 0 ? p.weightGram : 200,
           quantity: p.quantity,
         })),
       };

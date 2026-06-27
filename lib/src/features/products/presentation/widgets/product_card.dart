@@ -49,8 +49,9 @@ class ProductCard extends StatelessWidget {
 
     void handleTap() {
       if (isProductClickable && !isOutOfStock) {
-        final productToSend = hasPromo ? product.copyWith(price: discountedPrice) : product;
-        context.push('/product/${product.id}', extra: productToSend);
+        // Kirim produk dengan harga ASLI. Halaman detail menampilkan diskon
+        // via PromotionProvider, sehingga harga coret + badge persen muncul.
+        context.push('/product/${product.id}', extra: product);
       }
     }
 
