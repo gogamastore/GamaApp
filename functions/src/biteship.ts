@@ -302,7 +302,7 @@ export const getBiteshipRates = onCall(
 // Dipanggil admin setelah order dikonfirmasi siap dikirim
 // ─────────────────────────────────────────────────────────────────
 export const createBiteshipOrder = onCall(
-  { region: "asia-southeast1", secrets: [BITESHIP_API_KEY, BITESHIP_ORIGIN_AREA_ID, BITESHIP_ORIGIN_ADDRESS, BITESHIP_ORIGIN_CONTACT_NAME, BITESHIP_ORIGIN_CONTACT_PHONE, BITESHIP_IS_PRODUCTION] },
+  { region: "asia-southeast1", secrets: [BITESHIP_API_KEY, BITESHIP_ORIGIN_AREA_ID, BITESHIP_ORIGIN_ADDRESS, BITESHIP_ORIGIN_CONTACT_NAME, BITESHIP_ORIGIN_CONTACT_PHONE, BITESHIP_ORIGIN_LATITUDE, BITESHIP_ORIGIN_LONGITUDE, BITESHIP_IS_PRODUCTION] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Login diperlukan.");
 
@@ -336,9 +336,43 @@ export const createBiteshipOrder = onCall(
     const originAddress      = BITESHIP_ORIGIN_ADDRESS.value();
     const originAreaId       = BITESHIP_ORIGIN_AREA_ID.value();
 
+    // ── Koordinat GPS (krusial untuk kurir instan) ─────────────────
+    // Biteship menghitung harga kurir instan (gojek, grab, dll)
+    // berdasarkan jarak GPS, BUKAN Area ID. Tanpa koordinat order akan
+    // gagal dengan "Courier price is not found". Mirror getBiteshipRates.
+    const toNumber = (v: any): number =>
+      typeof v === "number" ? v : parseFloat(v ?? "0") || 0;
+    const originLat = parseFloat(BITESHIP_ORIGIN_LATITUDE.value() || "0");
+    const originLng = parseFloat(BITESHIP_ORIGIN_LONGITUDE.value() || "0");
+    const destLat = toNumber(order.destinationLatitude);
+    const destLng = toNumber(order.destinationLongitude);
+    const hasOriginCoords = originLat !== 0 && originLng !== 0;
+    const hasDestCoords = destLat !== 0 && destLng !== 0;
+
+    // Kurir instan wajib punya koordinat — hentikan dengan pesan jelas
+    const INSTANT_COURIERS = [
+      "gojek", "grab", "grab_express", "gosend", "paxel", "lalamove", "borzo",
+    ];
+    const isInstant = INSTANT_COURIERS.includes(
+      (order.biteshipCourierCode ?? "").toLowerCase()
+    );
+    if (isInstant && !(hasOriginCoords && hasDestCoords)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Kurir instan membutuhkan koordinat GPS toko & tujuan. " +
+        "Pastikan secret BITESHIP_ORIGIN_LATITUDE/LONGITUDE sudah diset " +
+        "dan alamat pelanggan memiliki titik lokasi peta."
+      );
+    }
+
     try {
       const api = biteshipApi();
-      const resp = await api.post("/v1/orders", {
+
+      // Kurir instan (Grab, GoSend, dll) menggunakan koordinat GPS saja untuk routing.
+      // Menyertakan area_id bersamaan dengan koordinat menyebabkan konflik pricing (40002021).
+      const useCoordOnly = isInstant && hasOriginCoords && hasDestCoords;
+
+      const orderPayload: Record<string, any> = {
         shipper_contact_name: originContactName,
         shipper_contact_phone: originContactPhone,
         shipper_contact_email: "",
@@ -346,18 +380,16 @@ export const createBiteshipOrder = onCall(
         origin_contact_name: originContactName,
         origin_contact_phone: originContactPhone,
         origin_address: originAddress,
-        origin_area_id: originAreaId,
         origin_note: "Hubungi pengirim sebelum pickup",
         destination_contact_name: customerDetails.name ?? "",
         destination_contact_phone: customerDetails.whatsapp ?? "",
         destination_contact_email: "",
         destination_address: customerDetails.address ?? "",
-        destination_area_id: order.destinationAreaId ?? "",
         destination_note: order.deliveryNotes ?? "",
         courier_company: order.biteshipCourierCode,
         courier_type: order.biteshipServiceCode,
         courier_insurance: 0,
-        delivery_type: "now",
+        delivery_type: isInstant ? "now" : "scheduled",
         order_note: `Order #${orderId} dari Gogama Store`,
         metadata: { orderId },
         items: (order.products as any[]).map((p: any) => ({
@@ -371,7 +403,38 @@ export const createBiteshipOrder = onCall(
           weight: 200,
           quantity: p.quantity,
         })),
-      });
+      };
+
+      // PENTING: Orders API (/v1/orders) memakai OBJEK koordinat
+      //   origin_coordinate: { latitude, longitude }
+      //   destination_coordinate: { latitude, longitude }
+      // Berbeda dari Rates API (/v1/rates/couriers) yang memakai field flat
+      //   origin_latitude / destination_latitude.
+      // Field flat diabaikan oleh Orders API → error 40002010 (destination kosong).
+      //
+      // Kurir instan: koordinat saja (tanpa area_id, agar tidak konflik pricing 40002021)
+      // Kurir reguler: area_id saja
+      if (useCoordOnly) {
+        orderPayload.origin_coordinate = { latitude: originLat, longitude: originLng };
+        orderPayload.destination_coordinate = { latitude: destLat, longitude: destLng };
+      } else {
+        orderPayload.origin_area_id = originAreaId;
+        orderPayload.destination_area_id = order.destinationAreaId ?? "";
+        // Sertakan koordinat (objek) jika tersedia — membantu akurasi routing reguler
+        if (hasOriginCoords) {
+          orderPayload.origin_coordinate = { latitude: originLat, longitude: originLng };
+        }
+        if (hasDestCoords) {
+          orderPayload.destination_coordinate = { latitude: destLat, longitude: destLng };
+        }
+      }
+
+      logger.info(
+        `createBiteshipOrder: order=${orderId}, courier=${order.biteshipCourierCode}/${order.biteshipServiceCode}, ` +
+        `instan=${isInstant}, useCoordOnly=${useCoordOnly}, koordinat=${hasOriginCoords && hasDestCoords}`
+      );
+
+      const resp = await api.post("/v1/orders", orderPayload);
 
       const biteshipOrder = resp.data;
 

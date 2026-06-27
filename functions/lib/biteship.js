@@ -239,7 +239,7 @@ exports.getBiteshipRates = (0, https_1.onCall)({
 // FUNCTION 3: Buat order Biteship + request pickup otomatis
 // Dipanggil admin setelah order dikonfirmasi siap dikirim
 // ─────────────────────────────────────────────────────────────────
-exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", secrets: [BITESHIP_API_KEY, BITESHIP_ORIGIN_AREA_ID, BITESHIP_ORIGIN_ADDRESS, BITESHIP_ORIGIN_CONTACT_NAME, BITESHIP_ORIGIN_CONTACT_PHONE, BITESHIP_IS_PRODUCTION] }, async (request) => {
+exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", secrets: [BITESHIP_API_KEY, BITESHIP_ORIGIN_AREA_ID, BITESHIP_ORIGIN_ADDRESS, BITESHIP_ORIGIN_CONTACT_NAME, BITESHIP_ORIGIN_CONTACT_PHONE, BITESHIP_ORIGIN_LATITUDE, BITESHIP_ORIGIN_LONGITUDE, BITESHIP_IS_PRODUCTION] }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError("unauthenticated", "Login diperlukan.");
     const { orderId } = request.data;
@@ -264,9 +264,30 @@ exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", s
     const originContactPhone = BITESHIP_ORIGIN_CONTACT_PHONE.value();
     const originAddress = BITESHIP_ORIGIN_ADDRESS.value();
     const originAreaId = BITESHIP_ORIGIN_AREA_ID.value();
+    // ── Koordinat GPS (krusial untuk kurir instan) ─────────────────
+    // Biteship menghitung harga kurir instan (gojek, grab, dll)
+    // berdasarkan jarak GPS, BUKAN Area ID. Tanpa koordinat order akan
+    // gagal dengan "Courier price is not found". Mirror getBiteshipRates.
+    const toNumber = (v) => typeof v === "number" ? v : parseFloat(v ?? "0") || 0;
+    const originLat = parseFloat(BITESHIP_ORIGIN_LATITUDE.value() || "0");
+    const originLng = parseFloat(BITESHIP_ORIGIN_LONGITUDE.value() || "0");
+    const destLat = toNumber(order.destinationLatitude);
+    const destLng = toNumber(order.destinationLongitude);
+    const hasOriginCoords = originLat !== 0 && originLng !== 0;
+    const hasDestCoords = destLat !== 0 && destLng !== 0;
+    // Kurir instan wajib punya koordinat — hentikan dengan pesan jelas
+    const INSTANT_COURIERS = [
+        "gojek", "grab", "grab_express", "gosend", "paxel", "lalamove", "borzo",
+    ];
+    const isInstant = INSTANT_COURIERS.includes((order.biteshipCourierCode ?? "").toLowerCase());
+    if (isInstant && !(hasOriginCoords && hasDestCoords)) {
+        throw new https_1.HttpsError("failed-precondition", "Kurir instan membutuhkan koordinat GPS toko & tujuan. " +
+            "Pastikan secret BITESHIP_ORIGIN_LATITUDE/LONGITUDE sudah diset " +
+            "dan alamat pelanggan memiliki titik lokasi peta.");
+    }
     try {
         const api = biteshipApi();
-        const resp = await api.post("/v1/orders", {
+        const orderPayload = {
             shipper_contact_name: originContactName,
             shipper_contact_phone: originContactPhone,
             shipper_contact_email: "",
@@ -299,7 +320,19 @@ exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", s
                 weight: 200,
                 quantity: p.quantity,
             })),
-        });
+        };
+        // Tambahkan koordinat GPS (Mix) — sama persis seperti getBiteshipRates
+        if (hasOriginCoords) {
+            orderPayload.origin_latitude = originLat;
+            orderPayload.origin_longitude = originLng;
+        }
+        if (hasDestCoords) {
+            orderPayload.destination_latitude = destLat;
+            orderPayload.destination_longitude = destLng;
+        }
+        v2_1.logger.info(`createBiteshipOrder: order=${orderId}, courier=${order.biteshipCourierCode}, ` +
+            `instan=${isInstant}, koordinat=${hasOriginCoords && hasDestCoords}`);
+        const resp = await api.post("/v1/orders", orderPayload);
         const biteshipOrder = resp.data;
         // Resi ada di courier.waybill_id (bukan top-level waybill_id).
         // Fetch GET order segera untuk memastikan semua field tersedia.
