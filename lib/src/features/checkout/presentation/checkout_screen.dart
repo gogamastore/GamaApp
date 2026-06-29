@@ -10,6 +10,16 @@ import '../../../core/data/firestore_service.dart';
 import 'widgets/delivery_info_widget.dart';
 import 'widgets/biteship_rates_widget.dart';
 
+/// Format berat paket: gram, atau kg bila >= 1000 gram.
+String formatWeightGram(int gram) {
+  if (gram >= 1000) {
+    final kg = gram / 1000;
+    final str = kg.toStringAsFixed(gram % 1000 == 0 ? 0 : 1);
+    return '$str kg';
+  }
+  return '$gram gr';
+}
+
 class CheckoutScreen extends StatelessWidget {
   const CheckoutScreen({super.key});
 
@@ -181,11 +191,14 @@ class CheckoutScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle(provider.userAddresses.isEmpty
-              ? 'Alamat Pengiriman'
-              : 'Atau Isi Alamat Baru'),
+          _sectionTitle('Detail Pengiriman'),
 
-          // Search kota Biteship (juga bisa diketik manual)
+          // Detail penerima (read-only, dari alamat tersimpan terpilih)
+          const DeliveryInfoWidget(),
+          const SizedBox(height: 16),
+
+          // Area tujuan Biteship — tersinkron otomatis dari alamat terpilih,
+          // tetap bisa diubah manual bila perlu.
           BiteshipAreaSearchField(
             label: 'Cari Kota / Kecamatan Tujuan',
             onAreaSelected: (area) {
@@ -211,9 +224,6 @@ class CheckoutScreen extends StatelessWidget {
               ],
             ),
           ],
-
-          const SizedBox(height: 16),
-          const DeliveryInfoWidget(),
         ],
       ),
     );
@@ -551,7 +561,7 @@ class CheckoutScreen extends StatelessWidget {
                             overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
                         Text(
-                            '${item.quantity} × ${currency.format(item.harga)}',
+                            '${item.quantity} × ${currency.format(item.harga)}  ·  ${formatWeightGram((item.weightGram > 0 ? item.weightGram : 200) * item.quantity)}',
                             style: TextStyle(
                                 fontSize: 13, color: Colors.grey[600])),
                         const SizedBox(height: 4),
@@ -602,6 +612,22 @@ class CheckoutScreen extends StatelessWidget {
               children: [
                 Text('Subtotal', style: TextStyle(color: Colors.grey[600])),
                 Text(currency.format(provider.subtotal)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined,
+                        size: 15, color: Colors.grey[600]),
+                    const SizedBox(width: 6),
+                    Text('Total Berat', style: TextStyle(color: Colors.grey[600])),
+                  ],
+                ),
+                Text(formatWeightGram(provider.totalWeightGram),
+                    style: TextStyle(color: Colors.grey[700])),
               ],
             ),
             const SizedBox(height: 4),

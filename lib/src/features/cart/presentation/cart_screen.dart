@@ -18,6 +18,7 @@ class CartItemUI {
   final int quantity;
   final String gambar;
   final int stok;
+  final int weightGram;
 
   CartItemUI({
     required this.id,
@@ -27,6 +28,7 @@ class CartItemUI {
     required this.quantity,
     required this.gambar,
     required this.stok,
+    this.weightGram = 0,
   });
 
   factory CartItemUI.fromMap(Map<String, dynamic> map) {
@@ -38,6 +40,7 @@ class CartItemUI {
       quantity: map['quantity'] as int? ?? 0,
       gambar: map['gambar'] ?? '',
       stok: map['stok'] as int? ?? 0,
+      weightGram: (map['weightGram'] as num? ?? 0).toInt(),
     );
   }
 
@@ -52,6 +55,7 @@ class CartItemUI {
       quantity: quantity ?? this.quantity,
       gambar: gambar,
       stok: stok,
+      weightGram: weightGram,
     );
   }
 }

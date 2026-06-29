@@ -45,6 +45,19 @@ class _BiteshipAreaSearchFieldState extends State<BiteshipAreaSearchField> {
   }
 
   @override
+  void didUpdateWidget(BiteshipAreaSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sinkronkan field saat area dari provider berubah
+    // (mis. setelah user memilih alamat tersimpan → area terisi otomatis).
+    final newArea = widget.initialArea;
+    if (newArea?.id != oldWidget.initialArea?.id) {
+      _selected = newArea;
+      _controller.text = newArea?.displayName ?? '';
+      _suggestions = [];
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -371,10 +384,69 @@ class BiteshipRatesWidget extends StatelessWidget {
           ),
         ),
 
-        // Daftar rate
-        ...provider.biteshipRates
-            .map((rate) => _buildRateTile(context, rate, provider, currency)),
+        // Daftar rate — dikelompokkan per kategori agar rapi
+        ..._buildGroupedRates(context, provider, currency),
       ],
+    );
+  }
+
+  /// Kelompokkan rates per kategori: Instan, Ekspres, Reguler, Kargo.
+  List<Widget> _buildGroupedRates(
+    BuildContext context,
+    CheckoutProvider provider,
+    NumberFormat currency,
+  ) {
+    const order = ['same_day', 'next_day', 'reguler', 'cargo'];
+    const labels = {
+      'same_day': 'Kurir Instan',
+      'next_day': 'Kurir Ekspres (Next Day)',
+      'reguler': 'Kurir Reguler',
+      'cargo': 'Kargo',
+    };
+
+    final grouped = <String, List<BiteshipRate>>{};
+    for (final rate in provider.biteshipRates) {
+      grouped.putIfAbsent(rate.category, () => []).add(rate);
+    }
+
+    // Urutan: kategori dikenal dulu, lalu sisanya (jika ada)
+    final categories = [
+      ...order.where(grouped.containsKey),
+      ...grouped.keys.where((c) => !order.contains(c)),
+    ];
+
+    final widgets = <Widget>[];
+    for (final cat in categories) {
+      final rates = grouped[cat]!;
+      widgets.add(_groupHeader(labels[cat] ?? 'Lainnya', rates.length));
+      widgets.addAll(
+        rates.map((rate) => _buildRateTile(context, rate, provider, currency)),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _groupHeader(String label, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '($count)',
+            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+          ),
+        ],
+      ),
     );
   }
 

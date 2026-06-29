@@ -35,15 +35,9 @@ class FirestoreService {
 
   Future<Product> _transformProduct(Product product) async {
     final imageUrl = await _getDownloadUrl(product.imageUrl);
-    return Product(
-      id: product.id,
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      imageUrl: imageUrl,
-      category: product.category,
-      stock: product.stock,
-    );
+    // Pakai copyWith agar SEMUA field (termasuk weightGram & sku) tetap terbawa;
+    // hanya imageUrl yang di-resolve menjadi download URL.
+    return product.copyWith(imageUrl: imageUrl);
   }
   
   Future<Brand> _transformBrand(Brand brand) async {
@@ -221,7 +215,8 @@ class FirestoreService {
           'harga': itemPrice,
           'quantity': quantity,
           'gambar': product.imageUrl,
-          'stok': product.stock, 
+          'stok': product.stock,
+          'weightGram': product.weightGram,
         });
       }
     }

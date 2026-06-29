@@ -155,8 +155,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final double displayPrice = hasPromo ? discountedPrice : product.price;
 
     final bool stockAvailable = product.stock > 0;
+    // Tampilkan berat ASLI dari dokumen produk (bukan fallback manual 200gr).
     final String weightLabel =
-        product.weightGram > 0 ? '${product.weightGram} gram' : '200 gram';
+        product.weightGram > 0 ? '${product.weightGram} gram' : 'Belum diatur';
 
     return Scaffold(
       appBar: AppBar(

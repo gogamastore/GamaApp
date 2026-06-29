@@ -156,6 +156,7 @@ extension CartItemUICopyWith on CartItemUI {
       quantity: quantity ?? this.quantity,
       gambar: gambar,
       stok: stok,
+      weightGram: weightGram,
     );
   }
 }

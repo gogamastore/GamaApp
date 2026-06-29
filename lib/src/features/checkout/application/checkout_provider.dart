@@ -114,6 +114,13 @@ class CheckoutProvider with ChangeNotifier {
 
   double get subtotal => _cartProvider.total;
 
+  /// Total berat paket (gram): berat asli produk × qty (fallback 200gr).
+  /// Nilai inilah yang dikirim ke Biteship untuk menghitung tarif.
+  int get totalWeightGram => _cartProvider.items.fold(
+        0,
+        (sum, item) => sum + (item.weightGram > 0 ? item.weightGram : 200) * item.quantity,
+      );
+
   double get shippingCost {
     if (_selectedBiteshipRate != null) return _selectedBiteshipRate!.price;
     return _selectedShipping?.price ?? 0;
@@ -392,6 +399,11 @@ class CheckoutProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update catatan kurir TANPA menghapus alamat tersimpan yang dipilih.
+  void updateSpecialInstructions(String value) {
+    _deliveryInfo.specialInstructions = value;
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Methods — Biteship (semua kurir: JNE, J&T, GoSend, Grab, dll)
   // ─────────────────────────────────────────────────────────────
@@ -447,7 +459,7 @@ class CheckoutProvider with ChangeNotifier {
                   name: item.nama,
                   price: item.harga,
                   quantity: item.quantity,
-                  weightGram: 200,
+                  weightGram: item.weightGram > 0 ? item.weightGram : 200,
                 ))
             .toList()
         : [
@@ -588,6 +600,7 @@ class CheckoutProvider with ChangeNotifier {
                   'price': item.harga,
                   'quantity': item.quantity,
                   'image': item.gambar,
+                  'weightGram': item.weightGram > 0 ? item.weightGram : 200,
                 })
             .toList(),
         'productIds': _cartProvider.items.map((e) => e.productId).toList(),

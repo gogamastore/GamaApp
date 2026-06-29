@@ -287,6 +287,9 @@ exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", s
     }
     try {
         const api = biteshipApi();
+        // Kurir instan (Grab, GoSend, dll) menggunakan koordinat GPS saja untuk routing.
+        // Menyertakan area_id bersamaan dengan koordinat menyebabkan konflik pricing (40002021).
+        const useCoordOnly = isInstant && hasOriginCoords && hasDestCoords;
         const orderPayload = {
             shipper_contact_name: originContactName,
             shipper_contact_phone: originContactPhone,
@@ -295,18 +298,16 @@ exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", s
             origin_contact_name: originContactName,
             origin_contact_phone: originContactPhone,
             origin_address: originAddress,
-            origin_area_id: originAreaId,
             origin_note: "Hubungi pengirim sebelum pickup",
             destination_contact_name: customerDetails.name ?? "",
             destination_contact_phone: customerDetails.whatsapp ?? "",
             destination_contact_email: "",
             destination_address: customerDetails.address ?? "",
-            destination_area_id: order.destinationAreaId ?? "",
             destination_note: order.deliveryNotes ?? "",
             courier_company: order.biteshipCourierCode,
             courier_type: order.biteshipServiceCode,
             courier_insurance: 0,
-            delivery_type: "now",
+            delivery_type: isInstant ? "now" : "scheduled",
             order_note: `Order #${orderId} dari Gogama Store`,
             metadata: { orderId },
             items: order.products.map((p) => ({
@@ -317,21 +318,36 @@ exports.createBiteshipOrder = (0, https_1.onCall)({ region: "asia-southeast1", s
                 length: 10,
                 width: 10,
                 height: 10,
-                weight: 200,
+                weight: p.weightGram && p.weightGram > 0 ? p.weightGram : 200,
                 quantity: p.quantity,
             })),
         };
-        // Tambahkan koordinat GPS (Mix) — sama persis seperti getBiteshipRates
-        if (hasOriginCoords) {
-            orderPayload.origin_latitude = originLat;
-            orderPayload.origin_longitude = originLng;
+        // PENTING: Orders API (/v1/orders) memakai OBJEK koordinat
+        //   origin_coordinate: { latitude, longitude }
+        //   destination_coordinate: { latitude, longitude }
+        // Berbeda dari Rates API (/v1/rates/couriers) yang memakai field flat
+        //   origin_latitude / destination_latitude.
+        // Field flat diabaikan oleh Orders API → error 40002010 (destination kosong).
+        //
+        // Kurir instan: koordinat saja (tanpa area_id, agar tidak konflik pricing 40002021)
+        // Kurir reguler: area_id saja
+        if (useCoordOnly) {
+            orderPayload.origin_coordinate = { latitude: originLat, longitude: originLng };
+            orderPayload.destination_coordinate = { latitude: destLat, longitude: destLng };
         }
-        if (hasDestCoords) {
-            orderPayload.destination_latitude = destLat;
-            orderPayload.destination_longitude = destLng;
+        else {
+            orderPayload.origin_area_id = originAreaId;
+            orderPayload.destination_area_id = order.destinationAreaId ?? "";
+            // Sertakan koordinat (objek) jika tersedia — membantu akurasi routing reguler
+            if (hasOriginCoords) {
+                orderPayload.origin_coordinate = { latitude: originLat, longitude: originLng };
+            }
+            if (hasDestCoords) {
+                orderPayload.destination_coordinate = { latitude: destLat, longitude: destLng };
+            }
         }
-        v2_1.logger.info(`createBiteshipOrder: order=${orderId}, courier=${order.biteshipCourierCode}, ` +
-            `instan=${isInstant}, koordinat=${hasOriginCoords && hasDestCoords}`);
+        v2_1.logger.info(`createBiteshipOrder: order=${orderId}, courier=${order.biteshipCourierCode}/${order.biteshipServiceCode}, ` +
+            `instan=${isInstant}, useCoordOnly=${useCoordOnly}, koordinat=${hasOriginCoords && hasDestCoords}`);
         const resp = await api.post("/v1/orders", orderPayload);
         const biteshipOrder = resp.data;
         // Resi ada di courier.waybill_id (bukan top-level waybill_id).
