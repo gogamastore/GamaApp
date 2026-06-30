@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:developer' as developer;
 
 import '../../../core/data/firestore_service.dart';
+import '../../../core/update/app_update_service.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../authentication/domain/app_user.dart';
 import '../../orders/domain/order.dart';
@@ -192,7 +195,7 @@ class ProfileScreen extends StatelessWidget {
           _buildMenuListItem(context, icon: Icons.location_on_outlined, title: 'Alamat Pengiriman', subtitle: 'Kelola alamat untuk pengiriman', color: Colors.green, onTap: () => context.go('/profile/address')),
           _buildMenuListItem(context, icon: Icons.support_agent, title: 'Contact', subtitle: 'Hubungi kami dan akun official', color: Colors.lightGreen, onTap: () => context.go('/profile/contact')),
           _buildMenuListItem(context, icon: Icons.help_outline, title: 'Pusat Bantuan', subtitle: 'FAQ dan dukungan pelanggan', color: Colors.purple, onTap: () => context.go('/profile/help')),
-          _buildMenuListItem(context, icon: Icons.info_outline, title: 'Tentang Aplikasi', subtitle: 'Informasi aplikasi dan versi', color: Colors.grey, onTap: () {}, hideDivider: true),
+          _buildMenuListItem(context, icon: Icons.info_outline, title: 'Tentang Aplikasi', subtitle: 'Informasi aplikasi dan versi', color: Colors.grey, onTap: () => _showAboutAppDialog(context), hideDivider: true),
         ],
       ),
     );
@@ -262,6 +265,90 @@ class ProfileScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _showAboutAppDialog(BuildContext context) async {
+    final info = await PackageInfo.fromPlatform();
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.grey),
+              SizedBox(width: 8),
+              Text('Tentang Aplikasi'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Gogama Store',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Text('Versi ',
+                      style: TextStyle(color: Colors.grey[600])),
+                  Text('${info.version}+${info.buildNumber}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Aplikasi marketplace untuk reseller Gogama Store.',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _checkUpdateFromAbout(context);
+              },
+              child: const Text('Cek Pembaruan'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Tutup'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _checkUpdateFromAbout(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final info = await AppUpdateService().checkForUpdate();
+    if (!context.mounted) return;
+
+    if (info.updateAvailable) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Versi terbaru ${info.latestVersion} tersedia.'),
+          action: SnackBarAction(
+            label: 'Perbarui',
+            onPressed: () async {
+              if (info.updateUrl.isNotEmpty) {
+                final uri = Uri.tryParse(info.updateUrl);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              }
+            },
+          ),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Anda menggunakan versi terbaru.')),
+      );
+    }
   }
 
   Widget _buildSignOutButton(BuildContext context, AuthService authService) {

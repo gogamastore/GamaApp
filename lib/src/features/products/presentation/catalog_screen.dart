@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/data/firestore_service.dart';
 import '../domain/product.dart';
 import 'widgets/product_card.dart';
+import 'widgets/product_list_card.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -16,6 +17,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   late final FirestoreService _firestoreService;
   Stream<List<Product>>? _productsStream;
   String _searchQuery = '';
+  bool _isGridView = true; // tampilan default: grid
 
   @override
   void initState() {
@@ -28,19 +30,49 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-          decoration: const InputDecoration(
-            hintText: 'Cari produk...',
-            border: InputBorder.none,
-            hintStyle: TextStyle(color: Colors.white70),
+        titleSpacing: 8,
+        // Kotak pencarian ala Shopee: pill putih dengan ikon search.
+        title: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
           ),
-          style: const TextStyle(color: Colors.white), // Set text color to white
+          child: Row(
+            children: [
+              Icon(Icons.search, size: 20, color: Colors.grey[500]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                  textAlignVertical: TextAlignVertical.center,
+                  decoration: InputDecoration(
+                    hintText: 'Cari produk...',
+                    border: InputBorder.none,
+                    isCollapsed: true,
+                    hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
+                  ),
+                  style: const TextStyle(color: Colors.black87, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          // Tombol ubah tampilan grid ⇄ list.
+          IconButton(
+            tooltip: _isGridView ? 'Tampilan daftar' : 'Tampilan grid',
+            icon: Icon(
+              _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+            ),
+            onPressed: () => setState(() => _isGridView = !_isGridView),
+          ),
+        ],
       ),
       body: StreamBuilder<List<Product>>(
         stream: _productsStream,
@@ -98,20 +130,30 @@ class _CatalogScreenState extends State<CatalogScreen> {
             );
           }
 
-          return Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.55,
-                crossAxisSpacing: 8.0,
-                mainAxisSpacing: 8.0,
+          // Tampilan GRID (default) atau LIST sesuai toggle — data sama.
+          if (_isGridView) {
+            return Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.55,
+                  crossAxisSpacing: 8.0,
+                  mainAxisSpacing: 8.0,
+                ),
+                itemCount: products.length,
+                itemBuilder: (context, index) {
+                  return ProductCard(product: products[index]);
+                },
               ),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                return ProductCard(product: products[index]);
-              },
-            ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              return ProductListCard(product: products[index]);
+            },
           );
         },
       ),
