@@ -5,9 +5,10 @@ import 'package:myapp/src/features/authentication/presentation/login_screen.dart
 import 'package:myapp/src/features/authentication/presentation/reseller_registration_screen.dart'; // Import baru
 import 'package:myapp/src/features/authentication/presentation/splash_screen.dart';
 import 'package:myapp/src/features/products/presentation/home_screen.dart';
-import 'package:myapp/src/features/products/presentation/trending_screen.dart';
+import 'package:myapp/src/features/notifications/presentation/notifications_screen.dart';
 
 import '../../features/cart/presentation/cart_screen.dart';
+import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/checkout/presentation/checkout_screen.dart';
 import '../../features/checkout/presentation/payment_webview_screen.dart';
 import '../../features/orders/presentation/order_history_screen.dart';
@@ -89,13 +90,13 @@ class AppRouter {
               ),
             ],
           ),
-          // --- Trending Branch ---
+          // --- Notifications Branch ---
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/trending',
-                name: 'trending',
-                builder: (context, state) => const TrendingScreen(),
+                path: '/notifications',
+                name: 'notifications',
+                builder: (context, state) => const NotificationsScreen(),
               ),
             ],
           ),
@@ -173,6 +174,11 @@ class AppRouter {
         path: '/cart',
         name: 'cart',
         builder: (context, state) => const CartScreen(),
+      ),
+      GoRoute(
+        path: '/chat',
+        name: 'chat',
+        builder: (context, state) => const ChatScreen(),
       ),
       GoRoute(
         path: '/checkout',

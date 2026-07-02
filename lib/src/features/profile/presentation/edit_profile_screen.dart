@@ -118,7 +118,8 @@ class EditProfileScreenState extends State<EditProfileScreen> {
 
       final Map<String, dynamic> updatedData = {};
       if (_nameController.text.trim() != user.name) {
-        updatedData['displayName'] = _nameController.text.trim();
+        // Field 'name' — konsisten dengan AppUser.fromFirestore & halaman web.
+        updatedData['name'] = _nameController.text.trim();
       }
       final newWhatsapp = '62${_whatsappController.text.trim()}';
       if (newWhatsapp != user.whatsapp) {

@@ -48,6 +48,7 @@ class Order {
   final String status;
   final num subtotal;
   final num total;
+  final Timestamp? updatedAt;
 
   // ── Biteship fields ───────────────────────────────────────────
   final String? biteshipOrderId;
@@ -77,6 +78,7 @@ class Order {
     required this.status,
     required this.subtotal,
     required this.total,
+    this.updatedAt,
     this.biteshipOrderId,
     this.biteshipCourierCode,
     this.biteshipCourierName,
@@ -109,6 +111,10 @@ class Order {
 
   int get totalProducts => products.fold(0, (sum, item) => sum + item.quantity);
 
+  /// Waktu aktivitas terakhir (perubahan status) untuk deteksi notifikasi
+  /// "belum dilihat". Fallback ke tanggal order bila updatedAt tidak ada.
+  Timestamp get activityAt => updatedAt ?? date;
+
   String get formattedDate =>
       DateFormat('d MMMM yyyy', 'id_ID').format(date.toDate());
 
@@ -140,6 +146,7 @@ class Order {
       status: data['status'] ?? 'Unknown',
       subtotal: _toNum(data['subtotal']),
       total: _toNum(data['total']),
+      updatedAt: data['updatedAt'] is Timestamp ? data['updatedAt'] as Timestamp : null,
       // Biteship
       biteshipOrderId: data['biteshipOrderId'] as String?,
       biteshipCourierCode: data['biteshipCourierCode'] as String?,

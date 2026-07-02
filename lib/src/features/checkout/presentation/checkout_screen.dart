@@ -285,7 +285,10 @@ class CheckoutScreen extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        final pickup = provider.shippingOptions.first;
+        final pickup = provider.shippingOptions.firstWhere(
+          (o) => o.id == 'pickup',
+          orElse: () => provider.shippingOptions.first,
+        );
         context.read<CheckoutProvider>().selectShippingOption(pickup);
       },
       child: AnimatedContainer(

@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
@@ -42,6 +43,10 @@ void main() async {
       return true;
     };
   }
+
+  // Muat data locale untuk DateFormat/NumberFormat 'id_ID' (mencegah
+  // LocaleDataException saat memformat tanggal/mata uang, khususnya di Web).
+  await initializeDateFormatting('id_ID', null);
 
   runApp(const AppInitializer());
 }
