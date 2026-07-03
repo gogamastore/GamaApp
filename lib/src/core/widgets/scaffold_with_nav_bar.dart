@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -159,7 +160,7 @@ class _ChatIconButton extends StatelessWidget {
     final uid = context.watch<AuthService>().currentUser?.uid;
 
     final iconButton = IconButton(
-      icon: const Icon(Icons.chat_bubble_outline),
+      icon: const Icon(CupertinoIcons.chat_bubble_2),
       tooltip: 'Chat dengan Admin',
       onPressed: () => context.push('/chat'),
     );
