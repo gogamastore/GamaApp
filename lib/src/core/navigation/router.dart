@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:myapp/src/features/authentication/data/auth_service.dart';
 import 'package:myapp/src/features/authentication/presentation/login_screen.dart';
 import 'package:myapp/src/features/authentication/presentation/reseller_registration_screen.dart'; // Import baru
+import 'package:myapp/src/features/authentication/presentation/email_verification_screen.dart';
 import 'package:myapp/src/features/authentication/presentation/splash_screen.dart';
 import 'package:myapp/src/features/products/presentation/home_screen.dart';
 import 'package:myapp/src/features/notifications/presentation/notifications_screen.dart';
@@ -10,7 +11,6 @@ import 'package:myapp/src/features/notifications/presentation/notifications_scre
 import '../../features/cart/presentation/cart_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/checkout/presentation/checkout_screen.dart';
-import '../../features/checkout/presentation/payment_webview_screen.dart';
 import '../../features/orders/presentation/order_history_screen.dart';
 import '../../features/orders/presentation/order_detail_screen.dart';
 import '../../features/orders/domain/order.dart';
@@ -47,14 +47,26 @@ class AppRouter {
       final isGoingToLogin = location == '/login';
       final isGoingToRegister = location == '/register-reseller';
       final isGoingToSplash = location == '/splash';
+      final isGoingToVerifyEmail = location == '/verify-email';
 
-      // Jika sudah login, jangan biarkan ke halaman login, register, atau splash
-      if (isLoggedIn && (isGoingToLogin || isGoingToSplash || isGoingToRegister)) {
+      // Catatan: user dengan verificationStatus 'pending' yang emailnya belum
+      // diverifikasi TIDAK dianggap login oleh AuthService, sehingga otomatis
+      // tertahan di halaman login/verifikasi dan tidak bisa masuk ke beranda.
+
+      // Jika sudah login, jangan biarkan ke halaman login, register, splash, atau verifikasi email
+      if (isLoggedIn &&
+          (isGoingToLogin ||
+              isGoingToSplash ||
+              isGoingToRegister ||
+              isGoingToVerifyEmail)) {
         return '/';
       }
 
-      // Jika belum login dan tidak sedang menuju halaman login atau register, arahkan ke login
-      if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister) {
+      // Jika belum login, hanya izinkan halaman login, register, dan verifikasi email
+      if (!isLoggedIn &&
+          !isGoingToLogin &&
+          !isGoingToRegister &&
+          !isGoingToVerifyEmail) {
         return '/login';
       }
 
@@ -116,30 +128,28 @@ class AppRouter {
                   GoRoute(
                     path: 'orders',
                     name: 'orderHistory',
-                    builder: (context, state) => OrderHistoryScreen(
-                      initialTab: state.uri.queryParameters['tab'],
-                    ),
+                    builder: (context, state) => const OrderHistoryScreen(),
                   ),
                   GoRoute(
-                    path: 'address',
-                    name: 'address',
-                    builder: (context, state) => const AddressScreen(),
-                    routes: [
-                      GoRoute(
-                        path: 'add',
-                        name: 'addAddress',
-                        builder: (context, state) => const AddEditAddressScreen(),
-                      ),
-                      GoRoute(
-                        path: 'edit',
-                        name: 'editAddress',
-                        builder: (context, state) {
-                          final address = state.extra as Address?;
-                          return AddEditAddressScreen(address: address);
-                        },
-                      ),
-                    ]
-                  ),
+                      path: 'address',
+                      name: 'address',
+                      builder: (context, state) => const AddressScreen(),
+                      routes: [
+                        GoRoute(
+                          path: 'add',
+                          name: 'addAddress',
+                          builder: (context, state) =>
+                              const AddEditAddressScreen(),
+                        ),
+                        GoRoute(
+                          path: 'edit',
+                          name: 'editAddress',
+                          builder: (context, state) {
+                            final address = state.extra as Address?;
+                            return AddEditAddressScreen(address: address);
+                          },
+                        ),
+                      ]),
                   GoRoute(
                     path: 'contact',
                     name: 'contact',
@@ -186,17 +196,6 @@ class AppRouter {
         builder: (context, state) => const CheckoutScreen(),
       ),
       GoRoute(
-        path: '/payment-webview',
-        name: 'paymentWebView',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>;
-          return PaymentWebViewScreen(
-            orderId: extra['orderId'] as String,
-            redirectUrl: extra['redirectUrl'] as String,
-          );
-        },
-      ),
-      GoRoute(
         path: '/order-detail',
         name: 'orderDetail',
         builder: (context, state) {
@@ -214,6 +213,15 @@ class AppRouter {
         path: '/register-reseller',
         name: 'registerReseller',
         builder: (context, state) => const ResellerRegistrationScreen(),
+      ),
+      // --- RUTE BARU UNTUK VERIFIKASI EMAIL ---
+      GoRoute(
+        path: '/verify-email',
+        name: 'verifyEmail',
+        builder: (context, state) {
+          final email = state.extra as String?;
+          return EmailVerificationScreen(email: email ?? '');
+        },
       ),
     ],
   );

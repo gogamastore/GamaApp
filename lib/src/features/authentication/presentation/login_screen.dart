@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
@@ -33,10 +34,30 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final userCredential =
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
+      // Jika akun masih berstatus 'pending' dan emailnya belum diverifikasi,
+      // tahan di halaman login dan tawarkan kirim ulang email verifikasi.
+      final user = userCredential.user;
+      if (user != null) {
+        await user.reload();
+        final refreshedUser = FirebaseAuth.instance.currentUser;
+        if (refreshedUser != null && !refreshedUser.emailVerified) {
+          final doc = await FirebaseFirestore.instance
+              .collection('user')
+              .doc(refreshedUser.uid)
+              .get();
+          final data = doc.data() ?? {};
+          if (data['verificationStatus'] == 'pending') {
+            if (mounted) await _showVerificationRequiredDialog();
+            return;
+          }
+        }
+      }
       // Navigasi akan ditangani oleh onAuthStateChanged di App
     } on FirebaseAuthException catch (e) {
       String message;
@@ -68,6 +89,70 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
+  }
+
+  /// Muncul ketika akun berstatus 'pending' mencoba login sebelum
+  /// memverifikasi emailnya. Tombol "Kirim Sekarang" mengirim ulang link
+  /// verifikasi dari Firebase. Setelah dialog ditutup, user di-sign out
+  /// agar sesi tidak menggantung.
+  Future<void> _showVerificationRequiredDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.mark_email_unread_outlined, size: 48),
+        title: const Text('Verifikasi Email'),
+        content: const Text(
+          'Harap verifikasi email terlebih dahulu. Silakan cek inbox '
+          '(atau folder spam) Anda, lalu klik tautan verifikasi yang '
+          'kami kirimkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Tutup'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await FirebaseAuth.instance.currentUser
+                    ?.sendEmailVerification();
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Email verifikasi telah dikirim. Silakan cek inbox Anda.',
+                      ),
+                    ),
+                  );
+                }
+              } on FirebaseAuthException catch (e) {
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        e.code == 'too-many-requests'
+                            ? 'Terlalu banyak percobaan. Silakan coba lagi nanti.'
+                            : 'Gagal mengirim email verifikasi. Coba lagi.',
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Kirim Sekarang'),
+          ),
+        ],
+      ),
+    );
+    // Sign out setelah dialog ditutup — user pending memang tidak dianggap
+    // login oleh AuthService, ini hanya membersihkan sesi Firebase.
+    await FirebaseAuth.instance.signOut();
   }
 
   @override

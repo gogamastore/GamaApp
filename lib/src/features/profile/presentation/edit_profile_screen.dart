@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,7 +20,7 @@ class EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _whatsappController;
 
-  File? _imageFile;
+  Uint8List? _imageBytes;
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = false;
@@ -55,8 +55,9 @@ class EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _pickImage(ImageSource source) async {
     final pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
       setState(() {
-        _imageFile = File(pickedFile.path);
+        _imageBytes = bytes;
         _isDirty = true;
       });
     }
@@ -108,12 +109,15 @@ class EditProfileScreenState extends State<EditProfileScreen> {
       if (user == null) return;
 
       String? photoURL;
-      if (_imageFile != null) {
+      if (_imageBytes != null) {
         final storageRef = FirebaseStorage.instance
             .ref()
             .child('profile_pictures')
             .child('${user.uid}.jpg');
-        await storageRef.putFile(_imageFile!);
+        await storageRef.putData(
+          _imageBytes!,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
         photoURL = await storageRef.getDownloadURL();
       }
 
@@ -204,8 +208,8 @@ class EditProfileScreenState extends State<EditProfileScreen> {
                               child: SizedBox(
                                 width: 100,
                                 height: 100,
-                                child: _imageFile != null
-                                    ? Image.file(_imageFile!,
+                                child: _imageBytes != null
+                                    ? Image.memory(_imageBytes!,
                                         width: 100, height: 100, fit: BoxFit.cover)
                                     : (user.photoURL.isNotEmpty
                                         ? CachedNetworkImage(
