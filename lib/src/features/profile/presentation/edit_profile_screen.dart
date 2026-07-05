@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -199,17 +200,35 @@ class EditProfileScreenState extends State<EditProfileScreen> {
                         onTap: _showImagePickerOptions,
                         child: Stack(
                           children: [
-                            CircleAvatar(
-                              radius: 50,
-                              backgroundColor: Colors.grey[200],
-                              backgroundImage: _imageFile != null
-                                  ? FileImage(_imageFile!)
-                                  : (user.photoURL.isNotEmpty
-                                      ? NetworkImage(user.photoURL)
-                                      : null) as ImageProvider?,
-                              child: _imageFile == null && user.photoURL.isEmpty
-                                  ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                                  : null,
+                            ClipOval(
+                              child: SizedBox(
+                                width: 100,
+                                height: 100,
+                                child: _imageFile != null
+                                    ? Image.file(_imageFile!,
+                                        width: 100, height: 100, fit: BoxFit.cover)
+                                    : (user.photoURL.isNotEmpty
+                                        ? CachedNetworkImage(
+                                            imageUrl: user.photoURL,
+                                            width: 100,
+                                            height: 100,
+                                            fit: BoxFit.cover,
+                                            placeholder: (c, u) => Image.asset(
+                                                'assets/images/logo.png',
+                                                width: 100,
+                                                height: 100,
+                                                fit: BoxFit.cover),
+                                            errorWidget: (c, u, e) => Image.asset(
+                                                'assets/images/logo.png',
+                                                width: 100,
+                                                height: 100,
+                                                fit: BoxFit.cover),
+                                          )
+                                        : Image.asset('assets/images/logo.png',
+                                            width: 100,
+                                            height: 100,
+                                            fit: BoxFit.cover)),
+                              ),
                             ),
                             Positioned(
                               bottom: 0,

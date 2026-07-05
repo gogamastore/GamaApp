@@ -36,7 +36,26 @@ class FavoriteBrandList extends StatelessWidget {
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
-                          child: Image.network(brand.logoUrl, fit: BoxFit.contain),
+                          child: Image.network(
+                            brand.logoUrl,
+                            fit: BoxFit.contain,
+                            // Tangani gagal muat (offline/DNS/404) agar tidak
+                            // bocor ke Crashlytics sebagai error fatal.
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.business,
+                                    color: Colors.grey, size: 28),
+                            loadingBuilder: (context, child, progress) =>
+                                progress == null
+                                    ? child
+                                    : const Center(
+                                        child: SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        ),
+                                      ),
+                          ),
                         ),
                       ),
                       Padding(

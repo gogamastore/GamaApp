@@ -7,6 +7,7 @@ import 'dart:developer' as developer;
 
 import '../../../core/data/firestore_service.dart';
 import '../../../core/update/app_update_service.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../authentication/domain/app_user.dart';
 import '../../orders/domain/order.dart';
@@ -47,10 +48,6 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildProfileHeader(BuildContext context, AppUser user) {
-    final imageUrl = user.photoURL.isNotEmpty
-        ? user.photoURL
-        : 'https://firebasestorage.googleapis.com/v0/b/orderflow-r7jsk.firebasestorage.app/o/profile_pictures%2Fdefault_avatar.png?alt=media&token=16765581-8276-4d04-a5a0-3859e45c4f69';
-
     return Card(
       elevation: 4,
       shadowColor: Colors.black38,
@@ -62,11 +59,7 @@ class ProfileScreen extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundImage: NetworkImage(imageUrl),
-                  backgroundColor: Colors.grey[200],
-                ),
+                UserAvatar(photoUrl: user.photoURL, radius: 40),
                 Positioned(
                   bottom: -5,
                   right: -5,
