@@ -48,29 +48,14 @@ class AppRouter {
       final isGoingToLogin = location == '/login';
       final isGoingToRegister = location == '/register-reseller';
       final isGoingToSplash = location == '/splash';
-      final isGoingToVerifyEmail = location == '/verify-email';
-      final isGoingToForgotPassword = location == '/forgot-password';
 
-      // Catatan: user dengan verificationStatus 'pending' yang emailnya belum
-      // diverifikasi TIDAK dianggap login oleh AuthService, sehingga otomatis
-      // tertahan di halaman login/verifikasi dan tidak bisa masuk ke beranda.
-
-      // Jika sudah login, jangan biarkan ke halaman login, register, splash, atau verifikasi email
-      if (isLoggedIn &&
-          (isGoingToLogin ||
-              isGoingToSplash ||
-              isGoingToRegister ||
-              isGoingToVerifyEmail ||
-              isGoingToForgotPassword)) {
+      // Jika sudah login, jangan biarkan ke halaman login, register, atau splash
+      if (isLoggedIn && (isGoingToLogin || isGoingToSplash || isGoingToRegister)) {
         return '/';
       }
 
-      // Jika belum login, hanya izinkan halaman login, register, dan verifikasi email
-      if (!isLoggedIn &&
-          !isGoingToLogin &&
-          !isGoingToRegister &&
-          !isGoingToVerifyEmail &&
-          !isGoingToForgotPassword) {
+      // Jika belum login dan tidak sedang menuju halaman login atau register, arahkan ke login
+      if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister) {
         return '/login';
       }
 

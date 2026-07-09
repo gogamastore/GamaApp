@@ -81,11 +81,17 @@ class AppInitializerState extends State<AppInitializer> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: Text('Error initializing app: ${snapshot.error}'),
+            // Abaikan URL awal browser (mis. '/profile/edit' saat reload);
+            // navigasi sesungguhnya ditangani GoRouter setelah inisialisasi.
+            onGenerateInitialRoutes: (_) => [
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: Center(
+                    child: Text('Error initializing app: ${snapshot.error}'),
+                  ),
+                ),
               ),
-            ),
+            ],
           );
         }
 
@@ -93,8 +99,11 @@ class AppInitializerState extends State<AppInitializer> {
           return MyApp(authService: snapshot.data!);
         }
 
-        return const MaterialApp(
-          home: SplashScreen(),
+        return MaterialApp(
+          // Abaikan URL awal browser — lihat catatan di atas.
+          onGenerateInitialRoutes: (_) => [
+            MaterialPageRoute(builder: (_) => const SplashScreen()),
+          ],
         );
       },
     );
@@ -116,7 +125,8 @@ class MyApp extends StatelessWidget {
         Provider<FirestoreService>(create: (_) => FirestoreService()),
         // --- PENAMBAHAN PROVIDER PROMOSI ---
         ChangeNotifierProvider<PromotionProvider>(
-          create: (context) => PromotionProvider(context.read<FirestoreService>()),
+          create: (context) =>
+              PromotionProvider(context.read<FirestoreService>()),
         ),
         ChangeNotifierProxyProvider<AuthService, CartProvider>(
           create: (context) => CartProvider(
@@ -124,7 +134,8 @@ class MyApp extends StatelessWidget {
             context.read<AuthService>(),
           ),
           update: (context, auth, previousCart) =>
-              previousCart ?? CartProvider(context.read<FirestoreService>(), auth),
+              previousCart ??
+              CartProvider(context.read<FirestoreService>(), auth),
         ),
         ChangeNotifierProxyProvider<AuthService, AddressProvider>(
           create: (context) => AddressProvider(
