@@ -85,8 +85,17 @@ class AuthService with ChangeNotifier {
           error: e,
           stackTrace: s,
         );
-        _appUser = null;
-        _authStatus = AuthStatus.unauthenticated; // Treat errors as unauthenticated
+        // Gagal membaca Firestore (mis. jaringan sesaat putus) BUKAN berarti
+        // sesi login berakhir — token Firebase masih valid. Jangan paksa
+        // logout kalau pengguna sebelumnya sudah terautentikasi, agar tidak
+        // "tiba-tiba keluar". Hanya perlakukan sebagai unauthenticated bila
+        // memang belum pernah berhasil login di sesi ini.
+        if (_appUser != null) {
+          _authStatus = AuthStatus.authenticated;
+        } else {
+          _appUser = null;
+          _authStatus = AuthStatus.unauthenticated;
+        }
       }
     }
 
