@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 import 'src/core/navigation/router.dart';
+import 'src/core/store/store_closed_gate.dart';
 import 'src/core/update/update_gate.dart';
 import 'src/features/cart/application/cart_provider.dart';
 import 'src/features/authentication/data/auth_service.dart';
@@ -81,17 +82,11 @@ class AppInitializerState extends State<AppInitializer> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return MaterialApp(
-            // Abaikan URL awal browser (mis. '/profile/edit' saat reload);
-            // navigasi sesungguhnya ditangani GoRouter setelah inisialisasi.
-            onGenerateInitialRoutes: (_) => [
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: Center(
-                    child: Text('Error initializing app: ${snapshot.error}'),
-                  ),
-                ),
+            home: Scaffold(
+              body: Center(
+                child: Text('Error initializing app: ${snapshot.error}'),
               ),
-            ],
+            ),
           );
         }
 
@@ -99,11 +94,8 @@ class AppInitializerState extends State<AppInitializer> {
           return MyApp(authService: snapshot.data!);
         }
 
-        return MaterialApp(
-          // Abaikan URL awal browser — lihat catatan di atas.
-          onGenerateInitialRoutes: (_) => [
-            MaterialPageRoute(builder: (_) => const SplashScreen()),
-          ],
+        return const MaterialApp(
+          home: SplashScreen(),
         );
       },
     );
@@ -125,8 +117,7 @@ class MyApp extends StatelessWidget {
         Provider<FirestoreService>(create: (_) => FirestoreService()),
         // --- PENAMBAHAN PROVIDER PROMOSI ---
         ChangeNotifierProvider<PromotionProvider>(
-          create: (context) =>
-              PromotionProvider(context.read<FirestoreService>()),
+          create: (context) => PromotionProvider(context.read<FirestoreService>()),
         ),
         ChangeNotifierProxyProvider<AuthService, CartProvider>(
           create: (context) => CartProvider(
@@ -134,8 +125,7 @@ class MyApp extends StatelessWidget {
             context.read<AuthService>(),
           ),
           update: (context, auth, previousCart) =>
-              previousCart ??
-              CartProvider(context.read<FirestoreService>(), auth),
+              previousCart ?? CartProvider(context.read<FirestoreService>(), auth),
         ),
         ChangeNotifierProxyProvider<AuthService, AddressProvider>(
           create: (context) => AddressProvider(
@@ -154,9 +144,11 @@ class MyApp extends StatelessWidget {
         title: 'Gogama Store',
         theme: ThemeProvider.lightTheme,
         debugShowCheckedModeBanner: false,
-        // Gate pemeriksa versi: paksa update bila versi terpasang sudah usang.
-        builder: (context, child) =>
-            UpdateGate(child: child ?? const SizedBox.shrink()),
+        // Gate pemeriksa versi (paksa update bila versi usang) + gate Libur Toko
+        // (pemberitahuan non-dismissible saat admin mengaktifkan Libur).
+        builder: (context, child) => UpdateGate(
+          child: StoreClosedGate(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }
