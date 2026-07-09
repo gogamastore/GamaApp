@@ -25,7 +25,8 @@ class AuthService with ChangeNotifier {
 
   AuthService() {
     // Listen to auth state changes and update our own status
-    _authStateChangesSubscription = _firebaseAuth.authStateChanges().listen(_onAuthStateChanged);
+    _authStateChangesSubscription =
+        _firebaseAuth.authStateChanges().listen(_onAuthStateChanged);
     // Check the initial user state immediately
     _onAuthStateChanged(_firebaseAuth.currentUser);
   }
@@ -42,13 +43,34 @@ class AuthService with ChangeNotifier {
       _authStatus = AuthStatus.unauthenticated;
     } else {
       try {
-        final doc = await _firestore.collection('user').doc(firebaseUser.uid).get();
+        final docRef = _firestore.collection('user').doc(firebaseUser.uid);
+        final doc = await docRef.get();
         if (doc.exists) {
-          _appUser = AppUser.fromFirestore(doc);
-          _authStatus = AuthStatus.authenticated;
+          final data = doc.data() ?? {};
+          // Akun dengan verificationStatus 'pending' belum boleh dianggap
+          // login sampai emailnya diverifikasi. Akun lama tanpa field ini
+          // dianggap sudah terverifikasi agar tidak terkunci.
+          if (data['verificationStatus'] == 'pending') {
+            await firebaseUser.reload();
+            final refreshedUser = _firebaseAuth.currentUser;
+            if (refreshedUser != null && refreshedUser.emailVerified) {
+              // Email sudah diklik verifikasinya — perbarui status di
+              // Firestore lalu izinkan masuk (self-healing).
+              await docRef.update({'verificationStatus': 'verified'});
+              _appUser = AppUser.fromFirestore(doc);
+              _authStatus = AuthStatus.authenticated;
+            } else {
+              _appUser = null;
+              _authStatus = AuthStatus.unauthenticated;
+            }
+          } else {
+            _appUser = AppUser.fromFirestore(doc);
+            _authStatus = AuthStatus.authenticated;
+          }
         } else {
           _appUser = null;
-          _authStatus = AuthStatus.unauthenticated; // User exists in Auth but not Firestore
+          _authStatus = AuthStatus
+              .unauthenticated; // User exists in Auth but not Firestore
           developer.log(
             'Firestore document for user ${firebaseUser.uid} not found.',
             name: 'AuthService',
@@ -63,11 +85,20 @@ class AuthService with ChangeNotifier {
           error: e,
           stackTrace: s,
         );
-        _appUser = null;
-        _authStatus = AuthStatus.unauthenticated; // Treat errors as unauthenticated
+        // Gagal membaca Firestore (mis. jaringan sesaat putus) BUKAN berarti
+        // sesi login berakhir — token Firebase masih valid. Jangan paksa
+        // logout kalau pengguna sebelumnya sudah terautentikasi, agar tidak
+        // "tiba-tiba keluar". Hanya perlakukan sebagai unauthenticated bila
+        // memang belum pernah berhasil login di sesi ini.
+        if (_appUser != null) {
+          _authStatus = AuthStatus.authenticated;
+        } else {
+          _appUser = null;
+          _authStatus = AuthStatus.unauthenticated;
+        }
       }
     }
-    
+
     // --- FIX: Complete the future only once when the first auth state is known ---
     if (!_readyCompleter.isCompleted) {
       _readyCompleter.complete();
@@ -84,7 +115,8 @@ class AuthService with ChangeNotifier {
 
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
-  Future<User?> signInWithEmailAndPassword({required String email, required String password}) async {
+  Future<User?> signInWithEmailAndPassword(
+      {required String email, required String password}) async {
     try {
       final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
         email: email,
@@ -96,7 +128,8 @@ class AuthService with ChangeNotifier {
     }
   }
 
-  Future<User?> signUpWithEmailAndPassword({required String email, required String password}) async {
+  Future<User?> signUpWithEmailAndPassword(
+      {required String email, required String password}) async {
     try {
       final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
         email: email,

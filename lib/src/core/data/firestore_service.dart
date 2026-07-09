@@ -194,19 +194,50 @@ class FirestoreService {
       return {'items': [], 'total': 0.0};
     }
 
-    double total = 0;
-    List<Map<String, dynamic>> items = [];
-
-    for (var cartDoc in cartSnapshot.docs) {
+    // Kumpulkan productId unik dari dokumen keranjang.
+    final productIds = <String>{};
+    for (final cartDoc in cartSnapshot.docs) {
       final data = cartDoc.data();
-      final productId = data['product_id'] ?? cartDoc.id;
+      productIds.add((data['product_id'] ?? cartDoc.id) as String);
+    }
+
+    // Ambil produk secara BATCH (maks 30 id/query, dijalankan paralel) lalu
+    // resolve download URL gambar secara paralel. Ini menghilangkan ratusan
+    // round-trip berurutan (satu per item) yang membuat loading lama/crash.
+    final idList = productIds.toList();
+    final chunks = <List<String>>[];
+    for (var i = 0; i < idList.length; i += 30) {
+      final end = (i + 30 < idList.length) ? i + 30 : idList.length;
+      chunks.add(idList.sublist(i, end));
+    }
+
+    final productMap = <String, Product>{};
+    final chunkResults = await Future.wait(chunks.map((chunk) async {
+      final snap = await _db
+          .collection('products')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      return Future.wait(
+        snap.docs.map((doc) => _transformProduct(Product.fromFirestore(doc))),
+      );
+    }));
+    for (final products in chunkResults) {
+      for (final product in products) {
+        productMap[product.id] = product;
+      }
+    }
+
+    // Bangun daftar item mengikuti urutan dokumen keranjang.
+    double total = 0;
+    final List<Map<String, dynamic>> items = [];
+    for (final cartDoc in cartSnapshot.docs) {
+      final data = cartDoc.data();
+      final productId = (data['product_id'] ?? cartDoc.id) as String;
       final quantity = data['quantity'] as int;
       final itemPrice = (data['harga'] as num?)?.toDouble() ?? 0.0;
 
-      final productDoc = await _db.collection('products').doc(productId).get();
-
-      if (productDoc.exists) {
-        final product = await _transformProduct(Product.fromFirestore(productDoc));
+      final product = productMap[productId];
+      if (product != null) {
         total += itemPrice * quantity;
         items.add({
           'id': cartDoc.id,

@@ -63,14 +63,25 @@ class _ResellerRegistrationScreenState
           'email': user.email,
           'role': 'reseller',
           'photoURL': '', // Menambahkan photoURL kosong sebagai default
+          'verificationStatus':
+              'pending', // Berubah 'verified' setelah email diverifikasi
           'createdAt': FieldValue.serverTimestamp(),
         });
 
+        // Kirim email verifikasi. Selama verificationStatus masih 'pending',
+        // AuthService tidak akan menganggap user ini login, sehingga router
+        // tidak mungkin mengarahkan ke beranda.
+        await user.sendEmailVerification();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Pendaftaran reseller berhasil!')),
+            const SnackBar(
+              content: Text(
+                'Pendaftaran berhasil! Silakan verifikasi email Anda.',
+              ),
+            ),
           );
-          context.pop();
+          context.go('/verify-email', extra: user.email);
         }
       }
     } on FirebaseAuthException catch (e) {
