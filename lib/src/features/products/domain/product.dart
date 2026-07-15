@@ -10,6 +10,7 @@ class Product {
   final int stock;
   final int weightGram;
   final String sku;
+  final Timestamp? purchaseAt; // waktu terakhir dibeli/restock (untuk urutan katalog)
 
   Product({
     required this.id,
@@ -21,6 +22,7 @@ class Product {
     required this.stock,
     this.weightGram = 0,
     this.sku = '',
+    this.purchaseAt,
   });
 
   // --- LOGIKA BARU DIMULAI DI SINI ---
@@ -34,6 +36,7 @@ class Product {
     int? stock,
     int? weightGram,
     String? sku,
+    Timestamp? purchaseAt,
   }) {
     return Product(
       id: id ?? this.id,
@@ -45,6 +48,7 @@ class Product {
       stock: stock ?? this.stock,
       weightGram: weightGram ?? this.weightGram,
       sku: sku ?? this.sku,
+      purchaseAt: purchaseAt ?? this.purchaseAt,
     );
   }
   // --- LOGIKA BARU BERAKHIR DI SINI ---
@@ -88,6 +92,7 @@ class Product {
       stock: (map['stock'] as num? ?? 0).toInt(),
       weightGram: (map['weightGram'] as num? ?? 0).toInt(),
       sku: map['sku'] as String? ?? '',
+      purchaseAt: map['purchaseAt'] as Timestamp?,
     );
   }
 

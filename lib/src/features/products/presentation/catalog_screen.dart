@@ -98,7 +98,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
           // --- LOGIKA SORTIR BARU DIMULAI DI SINI ---
           products.sort((a, b) {
-            // Prioritas 1: Produk dengan stok > 0 (Tersedia) diutamakan.
+            // Prioritas 1: Produk dengan stok > 0 (Tersedia) diutamakan;
+            // produk habis (stok 0) selalu di paling belakang.
             final aTersedia = a.stock > 0;
             final bTersedia = b.stock > 0;
 
@@ -109,7 +110,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
               return 1; // a (habis) diletakkan setelah b (tersedia).
             }
 
-            // Prioritas 2: Jika status stok sama, urutkan berdasarkan nama (A-Z).
+            // Prioritas 2: purchaseAt TERBARU dulu (produk yang baru
+            // dibeli/restock tampil di depan). Produk tanpa purchaseAt
+            // dianggap paling lama (0).
+            final pa = a.purchaseAt?.millisecondsSinceEpoch ?? 0;
+            final pb = b.purchaseAt?.millisecondsSinceEpoch ?? 0;
+            if (pa != pb) {
+              return pb.compareTo(pa); // descending
+            }
+
+            // Prioritas 3 (fallback stabil): urutkan berdasarkan nama (A-Z).
             return a.name.toLowerCase().compareTo(b.name.toLowerCase());
           });
           // --- LOGIKA SORTIR BARU BERAKHIR DI SINI ---
