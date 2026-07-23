@@ -6,6 +6,15 @@ import '../../products/domain/product.dart';
 import '../domain/cart_item.dart';
 import '../presentation/cart_screen.dart'; // Using CartItemUI
 
+/// Hasil penambahan produk ke keranjang — dipakai agar pesan ke pengguna
+/// tepat (sebelumnya semua kegagalan dianggap "Keranjang Penuh").
+enum AddToCartResult {
+  success,
+  cartFull, // sudah 160 produk unik
+  insufficientStock, // total di keranjang akan melebihi stok
+  notLoggedIn,
+}
+
 class CartProvider with ChangeNotifier {
   final FirestoreService _firestoreService;
   final AuthService _authService;
@@ -54,24 +63,43 @@ class CartProvider with ChangeNotifier {
   }
 
   // --- LOGIKA BARU DIMULAI DI SINI ---
-  Future<bool> addItemToCart(Product product, int quantity,
+  Future<AddToCartResult> addItemToCart(Product product, int quantity,
       {double? discountPrice}) async {
     final user = _authService.currentUser;
-    if (user == null) return false;
+    if (user == null) return AddToCartResult.notLoggedIn;
 
-    // Batasi jumlah item di keranjang
-    if (_items.length >= 160) {
-      return false; // Kembalikan false jika keranjang penuh
+    // Jumlah produk ini yang SUDAH ada di keranjang.
+    final int existingIndex =
+        _items.indexWhere((item) => item.productId == product.id);
+    final bool itemExists = existingIndex >= 0;
+    final int currentQty = itemExists ? _items[existingIndex].quantity : 0;
+
+    // Batasi jumlah PRODUK UNIK di keranjang (maks 160), sama seperti web:
+    // hanya produk baru yang diblokir saat penuh — produk yang sudah ada di
+    // keranjang tetap boleh diubah jumlahnya.
+    if (!itemExists && _items.length >= 160) {
+      return AddToCartResult.cartFull;
+    }
+
+    // AKUMULASI (bukan menimpa) — samakan dengan web: qty lama + qty baru.
+    // `setCartItem` memakai set(merge:true) yang MENIMPA field quantity, jadi
+    // totalnya harus dihitung di sini.
+    final int newQuantity = currentQty + quantity;
+
+    // Karena kini terakumulasi, stok harus divalidasi terhadap TOTAL — batas
+    // di UI hanya membatasi qty yang dipilih sekali tambah.
+    if (newQuantity > product.stock) {
+      return AddToCartResult.insufficientStock;
     }
 
     final productToAdd = discountPrice != null
         ? product.copyWith(price: discountPrice)
         : product;
 
-    final cartItem = CartItem(product: productToAdd, quantity: quantity);
+    final cartItem = CartItem(product: productToAdd, quantity: newQuantity);
     await _firestoreService.setCartItem(user.uid, cartItem);
     await fetchCart(); // Ambil ulang data keranjang untuk memperbarui UI
-    return true; // Kembalikan true jika berhasil
+    return AddToCartResult.success;
   }
   // --- LOGIKA BARU BERAKHIR DI SINI ---
 

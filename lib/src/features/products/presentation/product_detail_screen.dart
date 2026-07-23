@@ -62,7 +62,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ? promo.discountPrice
             : null;
 
-    final bool success = await cartProvider.addItemToCart(
+    final result = await cartProvider.addItemToCart(
       _product!,
       _selectedQuantity,
       discountPrice: discountPrice,
@@ -70,20 +70,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     if (!mounted) return; // Pastikan widget masih ada di tree
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$_selectedQuantity x ${_product!.name} ditambahkan ke keranjang.'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } else {
+    void showInfoDialog(String title, String message) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Keranjang Penuh'),
-          content: const Text('Maaf Keranjang Anda Penuh, harap checkout terlebih dahulu, lalu mengisi keranjang anda kembali. Terima Kasih'),
+          title: Text(title),
+          content: Text(message),
           actions: [
             TextButton(
               child: const Text('Mengerti'),
@@ -92,6 +84,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ],
         ),
       );
+    }
+
+    switch (result) {
+      case AddToCartResult.success:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '$_selectedQuantity x ${_product!.name} ditambahkan ke keranjang.'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      case AddToCartResult.cartFull:
+        showInfoDialog('Keranjang Penuh',
+            'Maaf Keranjang Anda Penuh, harap checkout terlebih dahulu, lalu mengisi keranjang anda kembali. Terima Kasih');
+      case AddToCartResult.insufficientStock:
+        showInfoDialog('Stok Tidak Mencukupi',
+            'Jumlah produk ini di keranjang Anda ditambah $_selectedQuantity melebihi stok yang tersedia (${_product!.stock}).');
+      case AddToCartResult.notLoggedIn:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Harap login terlebih dahulu.')),
+        );
     }
   }
   // --- AKHIR FUNGSI BARU ---

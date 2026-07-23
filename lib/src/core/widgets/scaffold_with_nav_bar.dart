@@ -19,7 +19,7 @@ class ScaffoldWithNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gogama Store'),
+        title: const Text('Manafidh Store'),
         actions: const [
           _CartIconButton(),
           _ChatIconButton(),

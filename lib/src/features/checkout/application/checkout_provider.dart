@@ -577,6 +577,9 @@ class CheckoutProvider with ChangeNotifier {
       }
 
       final orderData = {
+        // Penanda kanal penjualan: memisahkan pesanan marketplace dari
+        // transaksi kasir POS (source: 'pos') di koleksi `orders` yang sama.
+        'source': 'marketplace',
         'created_at': now.toUtc().toIso8601String(),
         'updated_at': now.toUtc().toIso8601String(),
         'date': now,

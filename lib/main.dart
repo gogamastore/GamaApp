@@ -141,7 +141,7 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp.router(
         routerConfig: appRouter.router,
-        title: 'Gogama Store',
+        title: 'Manafidh Store',
         theme: ThemeProvider.lightTheme,
         debugShowCheckedModeBanner: false,
         // Gate pemeriksa versi (paksa update bila versi usang) + gate Libur Toko
