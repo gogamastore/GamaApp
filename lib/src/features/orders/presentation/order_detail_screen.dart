@@ -630,6 +630,26 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           children: [
             _buildInfoRow('Subtotal', _currency.format(_order.subtotal)),
             _buildInfoRow('Ongkir', _currency.format(_order.shippingFee)),
+            if (_order.voucherDiscount > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Voucher${_order.voucherCode != null ? ' (${_order.voucherCode})' : ''}',
+                      style: TextStyle(color: Colors.green[700]),
+                    ),
+                    Text('- ${_currency.format(_order.voucherDiscount)}',
+                        style: TextStyle(color: Colors.green[700])),
+                  ],
+                ),
+              ),
+            if (_order.adminFee > 0)
+              _buildInfoRow('Biaya Admin', _currency.format(_order.adminFee)),
+            if (_order.serviceFee > 0)
+              _buildInfoRow(
+                  'Biaya Layanan', _currency.format(_order.serviceFee)),
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

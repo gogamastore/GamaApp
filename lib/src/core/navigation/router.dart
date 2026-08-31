@@ -12,6 +12,7 @@ import 'package:myapp/src/features/notifications/presentation/notifications_scre
 import '../../features/cart/presentation/cart_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/checkout/presentation/checkout_screen.dart';
+import '../../features/checkout/presentation/payment_webview_screen.dart';
 import '../../features/orders/presentation/order_history_screen.dart';
 import '../../features/orders/presentation/order_detail_screen.dart';
 import '../../features/orders/domain/order.dart';
@@ -205,6 +206,19 @@ class AppRouter {
         builder: (context, state) {
           final order = state.extra as Order;
           return OrderDetailScreen(order: order);
+        },
+      ),
+      // Halaman pembayaran Midtrans (WebView). Dibuka dari checkout,
+      // riwayat pesanan, dan detail pesanan lewat tombol "Bayar Sekarang".
+      GoRoute(
+        path: '/payment-webview',
+        name: 'paymentWebView',
+        builder: (context, state) {
+          final extra = (state.extra as Map?) ?? {};
+          return PaymentWebViewScreen(
+            orderId: (extra['orderId'] as String?) ?? '',
+            redirectUrl: (extra['redirectUrl'] as String?) ?? '',
+          );
         },
       ),
       GoRoute(

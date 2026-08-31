@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../theme/theme_provider.dart';
 import '../../features/authentication/data/auth_service.dart';
 import '../../features/cart/application/cart_provider.dart';
 import '../../features/chat/data/chat_service.dart';
@@ -19,7 +20,12 @@ class ScaffoldWithNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manafidh Store'),
+        title: Image.asset(
+          'assets/images/appbar_icon.png',
+          height: 50,
+          width: 120,
+          fit: BoxFit.contain,
+        ),
         actions: const [
           _CartIconButton(),
           _ChatIconButton(),
@@ -30,11 +36,11 @@ class ScaffoldWithNavBar extends StatelessWidget {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
-            label: 'Beranda',
+            label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.shop),
-            label: 'Katalog',
+            icon: Icon(Icons.shopping_bag),
+            label: 'All Produk',
           ),
           BottomNavigationBarItem(
             icon: _NotifTabIcon(),
@@ -46,7 +52,7 @@ class ScaffoldWithNavBar extends StatelessWidget {
           ),
         ],
         currentIndex: navigationShell.currentIndex,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
+        selectedItemColor: ThemeProvider.bottomNavSelected,
         unselectedItemColor: Colors.grey, // Make unselected items clearer
         type: BottomNavigationBarType.fixed, // Prevent items from shifting
         onTap: (int index) {

@@ -20,7 +20,7 @@ if (keyPropertiesFile.exists()) {
 }
 
 android {
-    namespace = "Store.gallery.pos"
+    namespace = "store.manafidh.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -43,7 +43,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "Store.gallery.pos"
+        applicationId = "store.manafidh.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

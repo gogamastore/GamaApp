@@ -74,6 +74,35 @@ export const createMidtransTransaction = onCall(
       });
     }
 
+    // Diskon voucher = baris item bernilai NEGATIF, agar jumlah item_details
+    // sama dengan gross_amount (order.total sudah dipotong voucher).
+    if (order.voucherDiscount && order.voucherDiscount > 0) {
+      itemDetails.push({
+        id: "VOUCHER",
+        price: -Math.round(order.voucherDiscount),
+        quantity: 1,
+        name: `Voucher ${order.voucherCode ?? "Diskon"}`.substring(0, 50),
+      });
+    }
+
+    // Biaya admin & layanan = baris item POSITIF (order.total sudah termasuk).
+    if (order.adminFee && order.adminFee > 0) {
+      itemDetails.push({
+        id: "ADMIN_FEE",
+        price: Math.round(order.adminFee),
+        quantity: 1,
+        name: "Biaya Admin",
+      });
+    }
+    if (order.serviceFee && order.serviceFee > 0) {
+      itemDetails.push({
+        id: "SERVICE_FEE",
+        price: Math.round(order.serviceFee),
+        quantity: 1,
+        name: "Biaya Layanan",
+      });
+    }
+
     const parameter = {
       transaction_details: {
         order_id: orderId,

@@ -1,7 +1,9 @@
 import 'dart:developer' as developer;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../domain/voucher.dart';
 import '../../../core/data/firestore_service.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../cart/application/cart_provider.dart' show CartProvider;
@@ -87,6 +89,17 @@ class CheckoutProvider with ChangeNotifier {
   bool _isLoadingBiteshipRates = false;
   String? _biteshipRatesError;
 
+  // ── Voucher ───────────────────────────────────────────────────
+  List<Voucher> _vouchers = [];
+  Voucher? _selectedVoucher;
+  Map<String, int> _voucherUsage = {}; // kode → jumlah pakai user 24 jam
+
+  // ── Biaya Admin & Layanan (settings/admin_fees) ───────────────
+  bool _feesEnabled = false;
+  num _adminFeeFlat = 0;
+  num _serviceFeePercent = 0;
+  num _serviceFeeMax = 0;
+
   // ─────────────────────────────────────────────────────────────
   // Getters
   // ─────────────────────────────────────────────────────────────
@@ -126,7 +139,65 @@ class CheckoutProvider with ChangeNotifier {
     return _selectedShipping?.price ?? 0;
   }
 
-  double get grandTotal => subtotal + shippingCost;
+  // ── Voucher ───────────────────────────────────────────────────
+  List<Voucher> get vouchers => _vouchers;
+  Voucher? get selectedVoucher => _selectedVoucher;
+
+  /// Voucher yang masih dalam masa berlaku (tanggal).
+  List<Voucher> get availableVouchers =>
+      _vouchers.where((v) => v.isDateValid).toList();
+
+  /// Potongan dari voucher terpilih (dihitung dari subtotal).
+  double get voucherDiscount {
+    final v = _selectedVoucher;
+    if (v == null) return 0;
+    if (subtotal < v.minPurchase) return 0;
+    double d;
+    if (v.discountType == 'percentage') {
+      d = (subtotal * v.discountValue / 100).roundToDouble();
+      if (v.maxDiscount > 0 && d > v.maxDiscount) d = v.maxDiscount.toDouble();
+    } else {
+      d = v.discountValue.toDouble();
+    }
+    return d > subtotal ? subtotal : d;
+  }
+
+  // ── Biaya admin & layanan ─────────────────────────────────────
+  double get adminFee => _feesEnabled ? _adminFeeFlat.toDouble() : 0;
+
+  double get serviceFee {
+    if (!_feesEnabled || _serviceFeePercent <= 0) return 0;
+    double f = (subtotal * _serviceFeePercent / 100).roundToDouble();
+    if (_serviceFeeMax > 0 && f > _serviceFeeMax) f = _serviceFeeMax.toDouble();
+    return f;
+  }
+
+  double get grandTotal {
+    final t =
+        subtotal + shippingCost - voucherDiscount + adminFee + serviceFee;
+    return t < 0 ? 0 : t;
+  }
+
+  /// Alasan voucher tak bisa dipakai (null = bisa). Masa berlaku sudah
+  /// disaring di [availableVouchers].
+  String? voucherIneligibleReason(Voucher v) {
+    if (subtotal < v.minPurchase) return 'Belanja belum memenuhi minimal';
+    if (v.dailyLimitPerUser > 0 &&
+        (_voucherUsage[v.code] ?? 0) >= v.dailyLimitPerUser) {
+      return 'Batas ${v.dailyLimitPerUser}×/hari sudah tercapai';
+    }
+    return null;
+  }
+
+  void selectVoucher(Voucher v) {
+    _selectedVoucher = v;
+    notifyListeners();
+  }
+
+  void clearVoucher() {
+    _selectedVoucher = null;
+    notifyListeners();
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Constructor
@@ -149,6 +220,8 @@ class CheckoutProvider with ChangeNotifier {
     _selectedShipping = _shippingOptions.first;
     await _fetchBankAccounts();
     await _fetchUserAddresses();
+    await _loadVouchers();
+    await _loadAdminFees();
     _isInitializing = false;
     developer.log(
       'Initialization complete. Found ${_userAddresses.length} addresses.',
@@ -217,6 +290,73 @@ class CheckoutProvider with ChangeNotifier {
       developer.log('Cannot fetch addresses: User is not logged in.',
           name: 'CheckoutProvider');
       _userAddresses = [];
+    }
+  }
+
+  /// Muat voucher AKTIF + hitung pemakaian user dalam 24 jam terakhir
+  /// (untuk batas pakai per user per hari).
+  Future<void> _loadVouchers() async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final snap = await db.collection('vouchers').get();
+      _vouchers = snap.docs
+          .where((d) =>
+              d.data()['isActive'] == true &&
+              (d.data()['code']?.toString().isNotEmpty ?? false))
+          .map((d) => Voucher.fromFirestore(d))
+          .toList();
+
+      final user = _authService.currentUser;
+      if (user != null) {
+        final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+        final ordersSnap = await db
+            .collection('orders')
+            .where('customerId', isEqualTo: user.uid)
+            .get();
+        final counts = <String, int>{};
+        for (final o in ordersSnap.docs) {
+          final data = o.data();
+          final code = data['voucherCode'];
+          if (code is! String || code.isEmpty) continue;
+          if ((data['status'] ?? '').toString().toLowerCase() == 'cancelled') {
+            continue;
+          }
+          DateTime? created;
+          final c = data['createdAt'];
+          final dt = data['date'];
+          if (c is Timestamp) {
+            created = c.toDate();
+          } else if (dt is Timestamp) {
+            created = dt.toDate();
+          }
+          if (created == null || created.isBefore(cutoff)) continue;
+          counts[code] = (counts[code] ?? 0) + 1;
+        }
+        _voucherUsage = counts;
+      }
+    } catch (e) {
+      developer.log('Error loading vouchers',
+          name: 'CheckoutProvider', error: e);
+    }
+  }
+
+  /// Muat konfigurasi biaya admin & layanan (settings/admin_fees).
+  Future<void> _loadAdminFees() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('admin_fees')
+          .get();
+      final d = snap.data();
+      if (d != null) {
+        _feesEnabled = d['enabled'] != false;
+        _adminFeeFlat = (d['adminFee'] as num?) ?? 0;
+        _serviceFeePercent = (d['serviceFeePercent'] as num?) ?? 0;
+        _serviceFeeMax = (d['serviceFeeMax'] as num?) ?? 0;
+      }
+    } catch (e) {
+      developer.log('Error loading admin fees',
+          name: 'CheckoutProvider', error: e);
     }
   }
 
@@ -623,6 +763,10 @@ class CheckoutProvider with ChangeNotifier {
           'destinationAreaId': _selectedDestinationArea?.id ?? '',
         },
         'subtotal': subtotal,
+        'voucherCode': _selectedVoucher?.code,
+        'voucherDiscount': voucherDiscount,
+        'adminFee': adminFee,
+        'serviceFee': serviceFee,
         'total': grandTotal,
         'status': _selectedPaymentMethod == 'cod' ? 'Processing' : 'Pending',
         'stockUpdated': true,

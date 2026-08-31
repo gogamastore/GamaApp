@@ -62,6 +62,8 @@ class CheckoutScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     _buildPaymentSection(context),
                     const SizedBox(height: 16),
+                    _buildVoucherSection(context),
+                    const SizedBox(height: 16),
                     _buildOrderSummary(context),
                     const SizedBox(height: 16),
                   ],
@@ -410,6 +412,186 @@ class CheckoutScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildVoucherSection(BuildContext context) {
+    final provider = context.watch<CheckoutProvider>();
+    final currency =
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final selected = provider.selectedVoucher;
+    final primary = Theme.of(context).primaryColor;
+
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Voucher Diskon'),
+          InkWell(
+            onTap: () => _showVoucherSheet(context),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: selected != null ? primary : Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.confirmation_number_outlined, color: primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: selected != null
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(selected.code,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
+                              Text('Hemat ${currency.format(provider.voucherDiscount)}',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.green[700])),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Pakai Voucher',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w600)),
+                              Text(
+                                provider.availableVouchers.isNotEmpty
+                                    ? 'Pilih voucher yang tersedia'
+                                    : 'Belum ada voucher tersedia',
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                  ),
+                  if (selected != null)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () =>
+                          context.read<CheckoutProvider>().clearVoucher(),
+                    )
+                  else
+                    const Icon(Icons.chevron_right, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVoucherSheet(BuildContext context) {
+    final provider = context.read<CheckoutProvider>();
+    final currency =
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final available = provider.availableVouchers;
+    final primary = Theme.of(context).primaryColor;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Voucher Tersedia',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              if (available.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                      child: Text('Belum ada voucher yang tersedia.')),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: available.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final v = available[i];
+                      final reason = provider.voucherIneligibleReason(v);
+                      final eligible = reason == null;
+                      final label = v.discountType == 'percentage'
+                          ? '${v.discountValue}%${v.maxDiscount > 0 ? ' (maks ${currency.format(v.maxDiscount)})' : ''}'
+                          : currency.format(v.discountValue);
+                      return Opacity(
+                        opacity: eligible ? 1 : 0.5,
+                        child: InkWell(
+                          onTap: eligible
+                              ? () {
+                                  provider.selectVoucher(v);
+                                  Navigator.pop(ctx);
+                                }
+                              : null,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              border:
+                                  Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.confirmation_number_outlined,
+                                    color: primary),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(v.code,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.5)),
+                                      Text(
+                                        'Potongan $label'
+                                        '${v.minPurchase > 0 ? ' · min. ${currency.format(v.minPurchase)}' : ''}'
+                                        '${v.dailyLimitPerUser > 0 ? ' · ${v.dailyLimitPerUser}×/hari' : ''}',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600]),
+                                      ),
+                                      if (!eligible)
+                                        Text(reason,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.red[600])),
+                                      if (v.description.isNotEmpty)
+                                        Text(v.description,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600])),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPaymentOption(
     BuildContext context, {
     required String value,
@@ -649,6 +831,41 @@ class CheckoutScreen extends StatelessWidget {
                 ),
               ],
             ),
+            if (provider.voucherDiscount > 0) ...[
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Voucher${provider.selectedVoucher != null ? ' (${provider.selectedVoucher!.code})' : ''}',
+                    style: TextStyle(color: Colors.green[700]),
+                  ),
+                  Text('- ${currency.format(provider.voucherDiscount)}',
+                      style: TextStyle(color: Colors.green[700])),
+                ],
+              ),
+            ],
+            if (provider.adminFee > 0) ...[
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Biaya Admin', style: TextStyle(color: Colors.grey[600])),
+                  Text(currency.format(provider.adminFee)),
+                ],
+              ),
+            ],
+            if (provider.serviceFee > 0) ...[
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Biaya Layanan',
+                      style: TextStyle(color: Colors.grey[600])),
+                  Text(currency.format(provider.serviceFee)),
+                ],
+              ),
+            ],
             const Divider(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

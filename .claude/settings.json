@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -v lib/src/core/navigation/scaffold_with_nav_bar.dart)",
+      "Bash(rm -v android/app/src/main/res/mipmap-*/ic_launcher.png)"
+    ]
+  }
+}

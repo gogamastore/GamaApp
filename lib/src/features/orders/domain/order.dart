@@ -48,6 +48,10 @@ class Order {
   final String status;
   final num subtotal;
   final num total;
+  final String? voucherCode;
+  final num voucherDiscount;
+  final num adminFee;
+  final num serviceFee;
   final Timestamp? updatedAt;
 
   // ── Biteship fields ───────────────────────────────────────────
@@ -78,6 +82,10 @@ class Order {
     required this.status,
     required this.subtotal,
     required this.total,
+    this.voucherCode,
+    this.voucherDiscount = 0,
+    this.adminFee = 0,
+    this.serviceFee = 0,
     this.updatedAt,
     this.biteshipOrderId,
     this.biteshipCourierCode,
@@ -146,6 +154,10 @@ class Order {
       status: data['status'] ?? 'Unknown',
       subtotal: _toNum(data['subtotal']),
       total: _toNum(data['total']),
+      voucherCode: data['voucherCode'] as String?,
+      voucherDiscount: _toNum(data['voucherDiscount']),
+      adminFee: _toNum(data['adminFee']),
+      serviceFee: _toNum(data['serviceFee']),
       updatedAt: data['updatedAt'] is Timestamp ? data['updatedAt'] as Timestamp : null,
       // Biteship
       biteshipOrderId: data['biteshipOrderId'] as String?,

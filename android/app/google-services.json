@@ -94,6 +94,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "889047904404-n6770u9klcpksrn8ok4l8ghvb0cvsm54.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "store.gallerymakassar.app",
+            "certificate_hash": "475def9c3f22aba96acbb1fbc0b7c3923506f113"
+          }
+        },
+        {
+          "client_id": "889047904404-r7ap3hko0ps1rffoo2bt41nltlf9bkq4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "store.gallerymakassar.app",
+            "certificate_hash": "377d31cc6e1935bb4d35244250d89790110b925b"
+          }
+        },
+        {
           "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -135,6 +151,50 @@
           "android_info": {
             "package_name": "store.gogama.app",
             "certificate_hash": "cb55e28f82b7ad04803154626d3823e84d497b08"
+          }
+        },
+        {
+          "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQm-CFYl5PZ9qWGVnVb5BF66cNjYl-8Qg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "889047904404-5eq3rg8bh6umthggv2oq86aq73mc5amq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "889047904404-a9ishiu92kdntvugpbojse5ab2c4ekog.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "store.gogama.myapp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:889047904404:android:04f81c796b357e84a5c481",
+        "android_client_info": {
+          "package_name": "store.manafidh.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "889047904404-b7akcgvudivt97es08g3n0gkglb8a731.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "store.manafidh.app",
+            "certificate_hash": "eeceef5efe53def2cecd072280caeccaf5b6022f"
           }
         },
         {

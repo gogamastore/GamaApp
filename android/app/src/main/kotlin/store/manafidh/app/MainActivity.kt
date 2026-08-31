@@ -1,4 +1,4 @@
-package Store.gallery.pos
+package store.manafidh.app
 
 import io.flutter.embedding.android.FlutterActivity
 
