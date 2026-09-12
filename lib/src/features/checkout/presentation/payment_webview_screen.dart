@@ -163,7 +163,75 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
       _onPaymentExpiredOrFailed();
       return NavigationDecision.prevent;
     }
+
+    // Deep link ke aplikasi e-wallet (GoPay/ShopeePay/DANA, dll). WebView tak
+    // bisa memuat skema non-http (mis. gojek://) atau universal-link e-wallet →
+    // buka di aplikasi eksternal, lalu cegah WebView menavigasinya (agar tak
+    // muncul halaman error).
+    final uri = Uri.tryParse(url);
+    if (uri != null && _shouldOpenExternally(uri)) {
+      _launchExternalApp(url);
+      return NavigationDecision.prevent;
+    }
+
     return NavigationDecision.navigate;
+  }
+
+  /// URL yang harus dibuka di aplikasi luar (bukan di dalam WebView):
+  /// skema non-http (deep link app) atau host e-wallet yang dikenal.
+  bool _shouldOpenExternally(Uri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme.isEmpty) return false;
+
+    // Skema kustom deep link (gojek://, gopay://, shopeeid://, dana://, dll).
+    if (scheme != 'http' && scheme != 'https') {
+      // Kecualikan skema teknis yang wajar ditangani WebView.
+      if (scheme == 'about' ||
+          scheme == 'data' ||
+          scheme == 'blob' ||
+          scheme == 'javascript') {
+        return false;
+      }
+      return true;
+    }
+
+    // Universal link e-wallet (https) — biar OS membukanya di aplikasi.
+    final host = uri.host.toLowerCase();
+    const ewalletHosts = [
+      'gojek.link',
+      'gopay.co.id',
+      'wsa.wallet.airpay', // ShopeePay
+      'shopee.co.id',
+      'link.dana.id',
+      'dana.id',
+      'linkaja.id',
+    ];
+    return ewalletHosts.any((h) => host.contains(h));
+  }
+
+  /// Buka URL di aplikasi eksternal (e-wallet). Bila gagal (app belum
+  /// terpasang), beri tahu user untuk memasang app / pilih metode lain.
+  Future<void> _launchExternalApp(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) _showLaunchError();
+    } catch (e) {
+      developer.log('launchExternalApp error: $e', name: 'PaymentWebView');
+      if (mounted) _showLaunchError();
+    }
+  }
+
+  void _showLaunchError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            'Tidak dapat membuka aplikasi pembayaran. Pastikan aplikasinya '
+            'terpasang, atau pilih metode pembayaran lain.'),
+        duration: Duration(seconds: 4),
+      ),
+    );
   }
 
   // ── Web: buka Midtrans di tab browser ────────────────────────

@@ -67,26 +67,26 @@ class Product {
     };
   }
 
-  factory Product.fromMap(Map<String, dynamic> map) {
-    double parsedPrice = 0.0;
-    final priceValue = map['price'];
-
-    if (priceValue is num) {
-      parsedPrice = priceValue.toDouble();
-    } else if (priceValue is String) {
-      try {
-        final cleanString = priceValue.replaceAll(RegExp(r'[^0-9]'), '');
-        parsedPrice = double.tryParse(cleanString) ?? 0.0;
-      } catch (_) {
-        parsedPrice = 0.0;
-      }
+  /// Parse harga dari Firestore yang bisa berupa NUMBER (double/int) ATAU
+  /// STRING. Web admin menyimpan harga produk sebagai string — baik angka
+  /// polos ("150000") maupun terformat ("Rp 150.000"). Karena format Rupiah
+  /// memakai titik sebagai pemisah RIBUAN (tanpa desimal), semua karakter
+  /// non-digit dibuang lalu di-parse. Aman untuk num maupun string kosong.
+  static double parsePrice(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+      return double.tryParse(digits) ?? 0.0;
     }
+    return 0.0;
+  }
 
+  factory Product.fromMap(Map<String, dynamic> map) {
     return Product(
       id: map['id'] as String? ?? '',
       name: map['name'] as String? ?? 'Nama Tidak Diketahui',
       description: map['description'] as String? ?? '',
-      price: parsedPrice,
+      price: parsePrice(map['price']),
       imageUrl: map['image'] as String? ?? '',
       category: map['category'] as String? ?? 'Lain-lain',
       stock: (map['stock'] as num? ?? 0).toInt(),

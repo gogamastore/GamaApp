@@ -66,6 +66,8 @@ class CheckoutScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     _buildOrderSummary(context),
                     const SizedBox(height: 16),
+                    _buildCostBreakdown(context),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -766,6 +768,101 @@ class CheckoutScreen extends StatelessWidget {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Rincian biaya (di bawah Ringkasan Pesanan)
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildCostBreakdown(BuildContext context) {
+    final provider = context.watch<CheckoutProvider>();
+    final currency =
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final hasShipping = provider.selectedShipping != null ||
+        provider.selectedBiteshipRate != null;
+
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Rincian Biaya'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Subtotal', style: TextStyle(color: Colors.grey[600])),
+              Text(currency.format(provider.subtotal)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.inventory_2_outlined,
+                      size: 15, color: Colors.grey[600]),
+                  const SizedBox(width: 6),
+                  Text('Total Berat',
+                      style: TextStyle(color: Colors.grey[600])),
+                ],
+              ),
+              Text(formatWeightGram(provider.totalWeightGram),
+                  style: TextStyle(color: Colors.grey[700])),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Pengiriman', style: TextStyle(color: Colors.grey[600])),
+              Text(
+                hasShipping
+                    ? currency.format(provider.shippingCost)
+                    : 'Belum dipilih',
+                style: TextStyle(
+                  color: hasShipping ? null : Colors.orange,
+                  fontWeight: hasShipping ? null : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          if (provider.voucherDiscount > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Voucher${provider.selectedVoucher != null ? ' (${provider.selectedVoucher!.code})' : ''}',
+                  style: TextStyle(color: Colors.green[700]),
+                ),
+                Text('- ${currency.format(provider.voucherDiscount)}',
+                    style: TextStyle(color: Colors.green[700])),
+              ],
+            ),
+          ],
+          if (provider.adminFee > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Biaya Admin', style: TextStyle(color: Colors.grey[600])),
+                Text(currency.format(provider.adminFee)),
+              ],
+            ),
+          ],
+          if (provider.serviceFee > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Biaya Layanan',
+                    style: TextStyle(color: Colors.grey[600])),
+                Text(currency.format(provider.serviceFee)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Bottom bar
   // ─────────────────────────────────────────────────────────────
   Widget _buildBottomBar(BuildContext context) {
@@ -792,81 +889,6 @@ class CheckoutScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Subtotal', style: TextStyle(color: Colors.grey[600])),
-                Text(currency.format(provider.subtotal)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.inventory_2_outlined,
-                        size: 15, color: Colors.grey[600]),
-                    const SizedBox(width: 6),
-                    Text('Total Berat', style: TextStyle(color: Colors.grey[600])),
-                  ],
-                ),
-                Text(formatWeightGram(provider.totalWeightGram),
-                    style: TextStyle(color: Colors.grey[700])),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Pengiriman', style: TextStyle(color: Colors.grey[600])),
-                Text(
-                  hasShipping
-                      ? currency.format(provider.shippingCost)
-                      : 'Belum dipilih',
-                  style: TextStyle(
-                    color: hasShipping ? null : Colors.orange,
-                    fontWeight: hasShipping ? null : FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            if (provider.voucherDiscount > 0) ...[
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Voucher${provider.selectedVoucher != null ? ' (${provider.selectedVoucher!.code})' : ''}',
-                    style: TextStyle(color: Colors.green[700]),
-                  ),
-                  Text('- ${currency.format(provider.voucherDiscount)}',
-                      style: TextStyle(color: Colors.green[700])),
-                ],
-              ),
-            ],
-            if (provider.adminFee > 0) ...[
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Biaya Admin', style: TextStyle(color: Colors.grey[600])),
-                  Text(currency.format(provider.adminFee)),
-                ],
-              ),
-            ],
-            if (provider.serviceFee > 0) ...[
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Biaya Layanan',
-                      style: TextStyle(color: Colors.grey[600])),
-                  Text(currency.format(provider.serviceFee)),
-                ],
-              ),
-            ],
-            const Divider(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

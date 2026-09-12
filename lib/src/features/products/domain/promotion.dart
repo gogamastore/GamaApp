@@ -21,7 +21,9 @@ class Promotion {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
     // --- PERANGKAP & PENGAMAN DATA NaN ---
-    double price = (data['discountPrice'] as num? ?? 0.0).toDouble();
+    // Harga promo bisa tersimpan sebagai number ATAU string (web admin),
+    // jadi pakai parser harga yang sama dengan produk.
+    double price = Product.parsePrice(data['discountPrice']);
 
     if (price.isNaN) {
       developer.log(

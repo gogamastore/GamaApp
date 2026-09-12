@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../theme/theme_provider.dart';
 import '../../features/authentication/data/auth_service.dart';
 import '../../features/cart/application/cart_provider.dart';
 import '../../features/chat/data/chat_service.dart';
 import '../../features/notifications/data/order_notification_service.dart';
+import 'promo_popup.dart';
 
-class ScaffoldWithNavBar extends StatelessWidget {
+class ScaffoldWithNavBar extends StatefulWidget {
   const ScaffoldWithNavBar({
     super.key,
     required this.navigationShell,
@@ -17,15 +17,26 @@ class ScaffoldWithNavBar extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   @override
+  State<ScaffoldWithNavBar> createState() => _ScaffoldWithNavBarState();
+}
+
+class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
+  @override
+  void initState() {
+    super.initState();
+    // Tampilkan popup notifikasi/iklan sekali saat masuk aplikasi (bila admin
+    // mengaktifkannya). Meniru popup di halaman web reseller.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) PromoPopup.maybeShow(context);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final navigationShell = widget.navigationShell;
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset(
-          'assets/images/appbar_icon.png',
-          height: 50,
-          width: 120,
-          fit: BoxFit.contain,
-        ),
+        title: const Text('Manafidh Store'),
         actions: const [
           _CartIconButton(),
           _ChatIconButton(),
@@ -36,11 +47,11 @@ class ScaffoldWithNavBar extends StatelessWidget {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
-            label: 'Home',
+            label: 'Beranda',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.shopping_bag),
-            label: 'All Produk',
+            icon: Icon(Icons.shop),
+            label: 'Katalog',
           ),
           BottomNavigationBarItem(
             icon: _NotifTabIcon(),
@@ -52,7 +63,7 @@ class ScaffoldWithNavBar extends StatelessWidget {
           ),
         ],
         currentIndex: navigationShell.currentIndex,
-        selectedItemColor: ThemeProvider.bottomNavSelected,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey, // Make unselected items clearer
         type: BottomNavigationBarType.fixed, // Prevent items from shifting
         onTap: (int index) {
