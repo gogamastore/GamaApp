@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../domain/banner_item.dart';
 import '../domain/brand.dart';
 import '../../../core/data/firestore_service.dart';
+import '../../../core/widgets/whatsapp_verification_popup.dart';
+import '../../authentication/data/auth_service.dart';
 import '../domain/product.dart';
 import 'widgets/product_card.dart';
 import 'widgets/promo_section.dart';
@@ -12,13 +14,39 @@ import 'widgets/promo_section.dart';
 import 'widgets/banner_carousel.dart';
 import 'widgets/favorite_brand_list.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // Peringatan verifikasi WhatsApp hanya ditampilkan sekali per sesi beranda,
+  // supaya tidak muncul berulang setiap kali tab Beranda dibuka kembali.
+  bool _whatsappPopupShown = false;
+
+  /// Tampilkan popup bila `whatsappStatus` pada dokumen user masih
+  /// 'unverified'. Dipanggil setelah frame pertama selesai dibangun.
+  void _maybeShowWhatsappPopup(AuthService authService) {
+    if (_whatsappPopupShown) return;
+    final user = authService.currentUser;
+    if (user == null || user.isWhatsappVerified) return;
+
+    _whatsappPopupShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showWhatsappVerificationPopup(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final firestoreService =
         Provider.of<FirestoreService>(context, listen: false);
+
+    // listen: true agar pengecekan ikut berjalan begitu data user selesai dimuat.
+    _maybeShowWhatsappPopup(Provider.of<AuthService>(context));
 
     return Scaffold(
       body: SingleChildScrollView(

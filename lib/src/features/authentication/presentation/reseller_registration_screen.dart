@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../profile/data/whatsapp_verification_service.dart';
+
 class ResellerRegistrationScreen extends StatefulWidget {
   const ResellerRegistrationScreen({super.key});
 
@@ -57,14 +59,18 @@ class _ResellerRegistrationScreenState
         await FirebaseFirestore.instance.collection('user').doc(user.uid).set({
           'name': _nameController.text.trim(),
           'shopName': _shopNameController.text.trim(),
-          'whatsapp':
-              _phoneController.text.trim(), // Menggunakan field 'whatsapp'
+          // Nomor disimpan ternormalisasi (62xxxxxxxxxx) agar cocok dengan
+          // format yang dipakai Cloud Function pengirim OTP.
+          'whatsapp': normalizeWhatsappNumber(_phoneController.text),
           'address': _addressController.text.trim(),
           'email': user.email,
           'role': 'reseller',
           'photoURL': '', // Menambahkan photoURL kosong sebagai default
           'verificationStatus':
               'pending', // Berubah 'verified' setelah email diverifikasi
+          // Nomor WhatsApp belum dibuktikan aktif — pembeli wajib memasukkan
+          // kode OTP di Profil Saya sebelum bisa memesan.
+          'whatsappStatus': 'unverified',
           'createdAt': FieldValue.serverTimestamp(),
         });
 

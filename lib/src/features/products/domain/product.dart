@@ -91,7 +91,9 @@ class Product {
       category: map['category'] as String? ?? 'Lain-lain',
       stock: (map['stock'] as num? ?? 0).toInt(),
       weightGram: (map['weightGram'] as num? ?? 0).toInt(),
-      sku: map['sku'] as String? ?? '',
+      // SKU/barcode bisa tersimpan sebagai int (mis. 8992821100422) ATAU
+      // string di Firestore, jadi konversi apa pun ke String agar tidak error.
+      sku: map['sku']?.toString() ?? '',
       purchaseAt: map['purchaseAt'] as Timestamp?,
     );
   }

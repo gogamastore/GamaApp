@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 
 import '../../authentication/data/auth_service.dart';
+import '../data/whatsapp_verification_service.dart';
+import 'widgets/whatsapp_verification_field.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -31,7 +33,11 @@ class EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     final user = context.read<AuthService>().currentUser;
     _nameController = TextEditingController(text: user?.name ?? '');
-    _whatsappController = TextEditingController(text: user?.whatsapp.replaceFirst('62', '') ?? '');
+    // Kolom menampilkan nomor tanpa kode negara (prefixText '+62 ').
+    final normalized = normalizeWhatsappNumber(user?.whatsapp ?? '');
+    _whatsappController = TextEditingController(
+      text: normalized.startsWith('62') ? normalized.substring(2) : normalized,
+    );
 
     _nameController.addListener(_markDirty);
     _whatsappController.addListener(_markDirty);
@@ -126,9 +132,12 @@ class EditProfileScreenState extends State<EditProfileScreen> {
         // Field 'name' — konsisten dengan AppUser.fromFirestore & halaman web.
         updatedData['name'] = _nameController.text.trim();
       }
-      final newWhatsapp = '62${_whatsappController.text.trim()}';
-      if (newWhatsapp != user.whatsapp) {
+      final newWhatsapp = normalizeWhatsappNumber(_whatsappController.text);
+      if (newWhatsapp != normalizeWhatsappNumber(user.whatsapp)) {
         updatedData['whatsapp'] = newWhatsapp;
+        // Ganti nomor = verifikasi sebelumnya batal; nomor baru wajib
+        // diverifikasi ulang lewat kode OTP.
+        updatedData['whatsappStatus'] = 'unverified';
       }
       if (photoURL != null && photoURL != user.photoURL) {
         updatedData['photoURL'] = photoURL;
@@ -279,24 +288,11 @@ class EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                WhatsappVerificationField(
                   controller: _whatsappController,
-                  decoration: const InputDecoration(
-                    labelText: 'WhatsApp *',
-                    prefixText: '+62 ',
-                    border: OutlineInputBorder(),
-                    hintText: '8123456789',
-                  ),
-                  keyboardType: TextInputType.phone,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Nomor WhatsApp tidak boleh kosong';
-                    }
-                    if (!RegExp(r'^\d{9,13}$').hasMatch(value)) {
-                      return 'Format nomor tidak valid';
-                    }
-                    return null;
-                  },
+                  verifiedNumber: user.whatsapp,
+                  isVerifiedStatus: user.isWhatsappVerified,
+                  enabled: !_isLoading,
                 ),
                  const Padding(
                   padding: EdgeInsets.only(top: 8.0, left: 12.0),

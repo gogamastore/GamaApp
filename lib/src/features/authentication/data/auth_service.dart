@@ -143,6 +143,9 @@ class AuthService with ChangeNotifier {
           'displayName': '', // Initially empty, to be set in profile
           'photoURL': '', // Initially empty
           'whatsapp': '', // Initially empty
+          // Nomor WhatsApp belum dibuktikan aktif — pembeli wajib memasukkan
+          // kode OTP di Profil Saya sebelum bisa memesan.
+          'whatsappStatus': 'unverified',
           'createdAt': FieldValue.serverTimestamp(),
         });
       }

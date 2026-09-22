@@ -62,41 +62,44 @@ class _QuantitySelectorState extends State<QuantitySelector> {
     final theme = Theme.of(context);
 
     return Row(
+      mainAxisSize: MainAxisSize.min, // ringkas agar muat di samping tombol
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // --- FIX: Reduced icon size and padding ---
         IconButton(
           icon: const Icon(Icons.remove_circle_outline),
-          iconSize: 22, // Smaller icon
+          iconSize: 20,
           padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(), // buang min-size 48x48
+          visualDensity: VisualDensity.compact,
           onPressed: widget.quantity > 1 ? () => widget.onChanged(widget.quantity - 1) : null,
           color: theme.colorScheme.primary,
         ),
-        const SizedBox(width: 12),
-        // --- FIX: Replaced Text with a small TextFormField for direct input ---
+        const SizedBox(width: 4),
         SizedBox(
-          width: 60, // Constrain the width of the input field
+          width: 42, // kolom angka yang ringkas
           child: TextFormField(
             controller: _controller,
             textAlign: TextAlign.center,
-            // --- FIX: Reduced font size ---
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            // Ukuran huruf diperkecil sesuai permintaan.
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: const InputDecoration(
+              isDense: true,
               border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.all(8), // Make it compact
+              contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 5),
             ),
             onFieldSubmitted: _validateAndSubmit,
-            onTapOutside: (_) => _validateAndSubmit(_controller.text), // Validate when focus is lost
+            onTapOutside: (_) => _validateAndSubmit(_controller.text),
           ),
         ),
-        const SizedBox(width: 12),
-        // --- FIX: Reduced icon size and padding ---
+        const SizedBox(width: 4),
         IconButton(
           icon: const Icon(Icons.add_circle_outline),
-          iconSize: 22, // Smaller icon
+          iconSize: 20,
           padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(), // buang min-size 48x48
+          visualDensity: VisualDensity.compact,
           onPressed: widget.quantity < widget.stock ? () => widget.onChanged(widget.quantity + 1) : null,
           color: theme.colorScheme.primary,
         ),

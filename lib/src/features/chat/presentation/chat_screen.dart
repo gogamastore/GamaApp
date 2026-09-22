@@ -10,7 +10,11 @@ import '../data/chat_service.dart';
 import '../domain/chat_message.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  /// Bila diisi, pesan ini dikirim otomatis sekali saat layar dibuka
+  /// (mis. riwayat pesanan atau link produk dari tombol "Hubungi"/"Chat").
+  final String? autoSendMessage;
+
+  const ChatScreen({super.key, this.autoSendMessage});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -32,6 +36,29 @@ class _ChatScreenState extends State<ChatScreen> {
     _userId = context.read<AuthService>().currentUser?.uid;
     if (_userId != null) {
       _chatService.markRead(_userId!, 'user');
+      final auto = widget.autoSendMessage?.trim() ?? '';
+      if (auto.isNotEmpty) {
+        // Kirim otomatis pesan konteks (riwayat pesanan / link produk).
+        WidgetsBinding.instance.addPostFrameCallback((_) => _autoSend(auto));
+      }
+    }
+  }
+
+  Future<void> _autoSend(String text) async {
+    final user = context.read<AuthService>().currentUser;
+    if (user == null) return;
+    try {
+      await _chatService.sendMessage(
+        userId: user.uid,
+        senderId: user.uid,
+        senderRole: 'user',
+        text: text,
+        userName: user.name,
+        userEmail: user.email,
+        userPhotoURL: user.photoURL,
+      );
+    } catch (_) {
+      // Diabaikan — pengguna tetap bisa mengetik & mengirim manual.
     }
   }
 

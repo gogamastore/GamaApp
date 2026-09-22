@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/utils/admin_contact.dart';
 import '../../checkout/data/biteship_service.dart';
 import '../domain/order.dart';
 
@@ -375,9 +376,114 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       buttons.add(const SizedBox(height: 12));
     }
 
+    // 4. Hubungi admin — selalu tersedia
+    buttons.add(SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.headset_mic_outlined),
+        label: const Text('Hubungi'),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        onPressed: _showContactSheet,
+      ),
+    ));
+    buttons.add(const SizedBox(height: 12));
+
     if (buttons.isEmpty) return const SizedBox.shrink();
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: buttons);
+  }
+
+  // ── Hubungi admin: pilih Obrolan atau WhatsApp ────────────────
+  void _showContactSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Hubungi Admin',
+                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor:
+                    Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.1),
+                child: Icon(Icons.chat_bubble_outline,
+                    color: Theme.of(ctx).colorScheme.primary),
+              ),
+              title: const Text('Obrolan'),
+              subtitle: const Text('Chat di aplikasi + riwayat pesanan'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _contactViaChat();
+              },
+            ),
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.green.withValues(alpha: 0.12),
+                child: const Icon(Icons.chat, color: Colors.green),
+              ),
+              title: const Text('WhatsApp'),
+              subtitle: const Text('Chat admin via WhatsApp'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _contactViaWhatsapp();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _contactViaChat() {
+    final statusLabel = _statusInfo(_order.status)['title'] as String;
+    final msg = orderChatMessage(
+      id: _order.id,
+      total: _order.total,
+      statusLabel: statusLabel,
+      productLines:
+          _order.products.map((p) => '• ${p.name} ×${p.quantity}').toList(),
+    );
+    context.push('/chat', extra: msg);
+  }
+
+  Future<void> _contactViaWhatsapp() async {
+    final admin = await fetchAdminContact();
+    if (!mounted) return;
+    if (admin == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kontak admin belum tersedia.')),
+      );
+      return;
+    }
+    final statusLabel = _statusInfo(_order.status)['title'] as String;
+    final text = orderWhatsappMessage(
+      id: _order.id,
+      total: _order.total,
+      statusLabel: statusLabel,
+      adminName: admin.name,
+    );
+    final ok = await openAdminWhatsapp(admin.whatsapp, text);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka WhatsApp.')),
+      );
+    }
   }
 
   // ── Status card ───────────────────────────────────────────────

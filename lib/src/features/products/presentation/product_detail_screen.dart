@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/data/firestore_service.dart';
+import '../../../core/utils/admin_contact.dart';
 import '../domain/product.dart';
 import '../application/promotion_provider.dart';
 import '../../cart/application/cart_provider.dart';
@@ -109,6 +111,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
   // --- AKHIR FUNGSI BARU ---
+
+  // Chat: buka obrolan aplikasi & kirim otomatis link produk ke admin.
+  void _handleChatAboutProduct(Product product, double price) {
+    final link = 'https://gallerypos.web.app/reseller/products/${product.id}';
+    final msg = productChatMessage(name: product.name, price: price, link: link);
+    context.push('/chat', extra: msg);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -255,7 +264,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(height: 8),
 
-              // --- Rating + terjual + SKU ---
+              // --- Rating + terjual ---
               Row(
                 children: [
                   ...List.generate(
@@ -264,19 +273,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text('·', style: TextStyle(color: Colors.grey[500])),
-                  const SizedBox(width: 8),
-                  Text('Terjual banyak',
-                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600])),
-                  if (product.sku.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Text('·', style: TextStyle(color: Colors.grey[500])),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text('SKU ${product.sku}',
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600])),
-                    ),
-                  ],
+                
                 ],
               ),
               const SizedBox(height: 16),
@@ -416,7 +413,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               const SizedBox(height: 8),
               _specRow(theme, 'Kategori', product.category.isNotEmpty ? product.category : '-'),
               _specRow(theme, 'Berat', weightLabel),
-              if (product.sku.isNotEmpty) _specRow(theme, 'SKU', product.sku),
               _specRow(theme, 'Stok', stockAvailable ? '${product.stock} tersedia' : 'Habis'),
             ],
           ),
@@ -425,27 +421,45 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (product.stock > 0)
+              // Kiri: tombol Chat (ikon + teks "Chat")
+              OutlinedButton.icon(
+                onPressed: () => _handleChatAboutProduct(product, displayPrice),
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('Chat'),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Tengah: tombol Tambah
+              Expanded(
+                child: ElevatedButton.icon(
+                  // --- PERUBAHAN: Panggil fungsi _handleAddToCart ---
+                  onPressed: _selectedQuantity > 0 ? _handleAddToCart : null,
+                  icon: const Icon(Icons.shopping_cart),
+                  label: Text(stockAvailable ? 'Tambah' : 'Stok Habis'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0)),
+                  ),
+                ),
+              ),
+              // Kanan: atur jumlah (di samping kanan tombol Tambah)
+              if (product.stock > 0) ...[
+                const SizedBox(width: 8),
                 QuantitySelector(
                   quantity: _selectedQuantity,
                   stock: product.stock,
                   onChanged: _onQuantityChanged,
                 ),
-              const SizedBox(height: 14),
-              ElevatedButton.icon(
-                // --- PERUBAHAN: Panggil fungsi _handleAddToCart ---
-                onPressed: _selectedQuantity > 0 ? _handleAddToCart : null,
-                icon: const Icon(Icons.add_shopping_cart),
-                label: Text(stockAvailable ? 'Tambah ke Keranjang' : 'Stok Habis'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-                ),
-              ),
+              ],
             ],
           ),
         ),

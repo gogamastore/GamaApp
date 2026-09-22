@@ -193,7 +193,8 @@ class AppRouter {
       GoRoute(
         path: '/chat',
         name: 'chat',
-        builder: (context, state) => const ChatScreen(),
+        builder: (context, state) =>
+            ChatScreen(autoSendMessage: state.extra as String?),
       ),
       GoRoute(
         path: '/checkout',
