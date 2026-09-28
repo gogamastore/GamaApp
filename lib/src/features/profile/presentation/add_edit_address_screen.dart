@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../authentication/data/auth_service.dart';
 import '../application/address_provider.dart';
 import '../domain/address.dart';
 import '../../../core/widgets/gogama_button.dart';
@@ -19,14 +20,16 @@ class AddEditAddressScreen extends StatefulWidget {
 
 class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   final _formKey = GlobalKey<FormState>();
-  late String _label, _name, _postalCode, _province;
+  late String _label, _name;
   late bool _isDefault;
   bool _isLoading = false;
 
-  // Controller untuk field yang bisa diisi dari Maps
+  // Controller untuk field yang bisa diisi otomatis dari Maps
   late TextEditingController _addressController;
   late TextEditingController _cityController;
   late TextEditingController _phoneController;
+  late TextEditingController _provinceController;
+  late TextEditingController _postalCodeController;
 
   // ── Koordinat GPS ─────────────────────────────────────────────
   double? _latitude;
@@ -42,20 +45,36 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Default Nama Penerima & WhatsApp diambil dari profil reseller (bisa diedit).
+    final profile = context.read<AuthService>().currentUser;
+    final profileName = profile?.name ?? '';
+    final profileWa = profile?.whatsapp ?? '';
+    final defaultName =
+        (profileName.isNotEmpty && profileName != 'Nama Tidak Ditemukan')
+            ? profileName
+            : '';
+    final defaultWa =
+        (profileWa.isNotEmpty && profileWa != 'Nomor Tidak Ditemukan')
+            ? profileWa
+            : '62';
+
     _label = widget.address?.label ?? '';
-    _name = widget.address?.name ?? '';
-    _province = widget.address?.province ?? '';
-    _postalCode = widget.address?.postalCode ?? '';
+    _name = widget.address?.name ?? defaultName;
     _isDefault = widget.address?.isDefault ?? false;
 
     _addressController =
         TextEditingController(text: widget.address?.address ?? '');
     _cityController = TextEditingController(text: widget.address?.city ?? '');
-    // Default "62" untuk nomor baru; edit pakai nilai yang sudah ada
+    _provinceController =
+        TextEditingController(text: widget.address?.province ?? '');
+    _postalCodeController =
+        TextEditingController(text: widget.address?.postalCode ?? '');
+    // Nomor baru pakai WhatsApp profil (fallback "62"); edit pakai nilai lama.
     _phoneController = TextEditingController(
       text: widget.address?.phone.isNotEmpty == true
           ? widget.address!.phone
-          : '62',
+          : defaultWa,
     );
 
     // Jika edit dan sudah ada koordinat, tandai sudah dipilih
@@ -81,6 +100,8 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
     _addressController.dispose();
     _cityController.dispose();
     _phoneController.dispose();
+    _provinceController.dispose();
+    _postalCodeController.dispose();
     super.dispose();
   }
 
@@ -103,19 +124,20 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       _longitude = result.longitude;
       _locationPicked = true;
 
-      // Isi otomatis field dari hasil reverse geocoding
-      // User masih bisa edit manual setelahnya
+      // Isi otomatis field dari hasil reverse geocoding (bisa diedit manual).
+      // Alamat & kota: isi bila masih kosong. Provinsi & kode pos: selalu
+      // ikuti hasil peta bila tersedia (sama seperti perilaku halaman web).
       if (_addressController.text.isEmpty) {
         _addressController.text = result.address;
       }
       if (_cityController.text.isEmpty) {
         _cityController.text = result.city;
       }
-      if (_province.isEmpty) {
-        setState(() => _province = result.province);
+      if (result.province.isNotEmpty) {
+        _provinceController.text = result.province;
       }
-      if (_postalCode.isEmpty) {
-        setState(() => _postalCode = result.postalCode);
+      if (result.postalCode.isNotEmpty) {
+        _postalCodeController.text = result.postalCode;
       }
     });
   }
@@ -148,8 +170,8 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       phone: _phoneController.text.trim(),
       address: _addressController.text.trim(),
       city: _cityController.text.trim(),
-      province: _province,
-      postalCode: _postalCode,
+      province: _provinceController.text.trim(),
+      postalCode: _postalCodeController.text.trim(),
       isDefault: _isDefault,
       latitude: _latitude,
       longitude: _longitude,
@@ -364,32 +386,38 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Provinsi — dropdown sederhana / free text
+            // Provinsi — terisi otomatis dari peta, bisa diedit
             TextFormField(
-              initialValue: _province,
-              decoration: const InputDecoration(
+              controller: _provinceController,
+              decoration: InputDecoration(
                 labelText: 'Provinsi',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.map_outlined),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.map_outlined),
+                suffixIcon: _locationPicked
+                    ? const Icon(Icons.check_circle,
+                        color: Colors.green, size: 20)
+                    : null,
               ),
-              onSaved: (v) => _province = v ?? '',
               validator: (v) => (v == null || v.isEmpty)
                   ? 'Provinsi tidak boleh kosong'
                   : null,
             ),
             const SizedBox(height: 16),
 
-            // Kode Pos
+            // Kode Pos — terisi otomatis dari peta, bisa diedit
             TextFormField(
-              initialValue: _postalCode,
-              decoration: const InputDecoration(
+              controller: _postalCodeController,
+              decoration: InputDecoration(
                 labelText: 'Kode Pos',
                 hintText: 'Contoh: 90234',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.markunread_mailbox_outlined),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.markunread_mailbox_outlined),
+                suffixIcon: _locationPicked
+                    ? const Icon(Icons.check_circle,
+                        color: Colors.green, size: 20)
+                    : null,
               ),
               keyboardType: TextInputType.number,
-              onSaved: (v) => _postalCode = v ?? '',
               validator: (v) => (v == null || v.isEmpty)
                   ? 'Kode pos tidak boleh kosong'
                   : null,
@@ -417,8 +445,9 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
                 setState(() {
                   _selectedBiteshipArea = area;
                   // Auto-isi kode pos jika masih kosong
-                  if (_postalCode.isEmpty && area.postalCode.isNotEmpty) {
-                    _postalCode = area.postalCode;
+                  if (_postalCodeController.text.isEmpty &&
+                      area.postalCode.isNotEmpty) {
+                    _postalCodeController.text = area.postalCode;
                   }
                 });
               },

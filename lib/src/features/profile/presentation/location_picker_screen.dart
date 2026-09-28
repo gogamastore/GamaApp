@@ -1,8 +1,21 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+
+/// Satu sugesti alamat dari Places Autocomplete.
+class _PlaceSuggestion {
+  final String placeId;
+  final String primary;
+  final String secondary;
+  _PlaceSuggestion({
+    required this.placeId,
+    required this.primary,
+    required this.secondary,
+  });
+}
 
 /// Hasil dari screen pemilihan lokasi
 class LocationPickerResult {
@@ -51,6 +64,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _isLoadingLocation = false;
   bool _isReverseGeocoding = false;
   String _addressPreview = 'Geser peta untuk memilih lokasi Anda';
+
+  // Pencarian titik alamat berdasarkan nama tempat.
+  final _searchController = TextEditingController();
+  bool _isSearching = false;
+  // Sugesti autocomplete (muncul di bawah kotak saat mengetik).
+  List<_PlaceSuggestion> _suggestions = [];
+  Timer? _debounce;
 
   // ── Selalu isi dengan koordinat, address opsional ────────────
   // Ini memastikan tombol SELALU bisa diklik meski geocoding gagal
@@ -260,6 +280,137 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
+  // ── Autocomplete: sugesti alamat live saat mengetik ──────────────
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    if (value.trim().length < 3) {
+      setState(() => _suggestions = []);
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _fetchSuggestions(value.trim());
+    });
+  }
+
+  Future<void> _fetchSuggestions(String input) async {
+    try {
+      // Places API (New) — kompatibel dengan pelanggan baru.
+      final res = await http.post(
+        Uri.parse('https://places.googleapis.com/v1/places:autocomplete'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': LocationPickerScreen._googleApiKey,
+        },
+        body: jsonEncode({
+          'input': input,
+          'includedRegionCodes': ['id'],
+          'languageCode': 'id',
+        }),
+      );
+      if (res.statusCode != 200) {
+        if (mounted) setState(() => _suggestions = []);
+        return;
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final raw = (data['suggestions'] as List<dynamic>?) ?? [];
+      final list = <_PlaceSuggestion>[];
+      for (final s in raw) {
+        final pp = (s as Map)['placePrediction'];
+        if (pp == null) continue;
+        final sf = pp['structuredFormat'] as Map<String, dynamic>?;
+        list.add(_PlaceSuggestion(
+          placeId: (pp['placeId'] ?? '').toString(),
+          primary: (sf?['mainText']?['text'] ??
+                  pp['text']?['text'] ??
+                  '')
+              .toString(),
+          secondary: (sf?['secondaryText']?['text'] ?? '').toString(),
+        ));
+      }
+      if (mounted) setState(() => _suggestions = list);
+    } catch (_) {
+      if (mounted) setState(() => _suggestions = []);
+    }
+  }
+
+  Future<void> _selectSuggestion(_PlaceSuggestion s) async {
+    FocusScope.of(context).unfocus();
+    _debounce?.cancel();
+    setState(() {
+      _suggestions = [];
+      _searchController.text = s.primary;
+      _isSearching = true;
+    });
+    try {
+      final res = await http.get(
+        Uri.parse('https://places.googleapis.com/v1/places/${s.placeId}'),
+        headers: {
+          'X-Goog-Api-Key': LocationPickerScreen._googleApiKey,
+          'X-Goog-FieldMask': 'location',
+        },
+      );
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final loc = data['location'] as Map<String, dynamic>?;
+      if (loc != null) {
+        final latLng = LatLng(
+          (loc['latitude'] as num).toDouble(),
+          (loc['longitude'] as num).toDouble(),
+        );
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+              CameraPosition(target: latLng, zoom: 17)),
+        );
+        setState(() => _selectedPosition = latLng);
+        await _reverseGeocode(latLng);
+      } else {
+        _showMessage('Gagal memuat detail lokasi.');
+      }
+    } catch (_) {
+      _showMessage('Gagal memuat detail lokasi.');
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  // ── Cari titik alamat berdasarkan nama tempat (forward geocoding) ──
+  // Fallback bila Places Autocomplete tidak tersedia / user tekan Enter.
+  Future<void> _searchLocation() async {
+    final q = _searchController.text.trim();
+    if (q.isEmpty) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _isSearching = true);
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json'
+        '?address=${Uri.encodeComponent(q)}'
+        '&key=${LocationPickerScreen._googleApiKey}'
+        '&language=id&region=id&components=country:ID',
+      );
+      final response = await http.get(url);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final results = (data['results'] as List<dynamic>?) ?? [];
+      if (data['status'] == 'OK' && results.isNotEmpty) {
+        final loc = (results.first as Map)['geometry']['location'] as Map;
+        final latLng = LatLng(
+          (loc['lat'] as num).toDouble(),
+          (loc['lng'] as num).toDouble(),
+        );
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+              CameraPosition(target: latLng, zoom: 17)),
+        );
+        setState(() => _selectedPosition = latLng);
+        await _reverseGeocode(latLng);
+      } else {
+        _showMessage('Lokasi tidak ditemukan. Coba kata kunci lain atau geser peta.');
+      }
+    } catch (_) {
+      _showMessage('Gagal mencari lokasi. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
   void _showMessage(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -272,6 +423,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
     _mapController?.dispose();
     super.dispose();
   }
@@ -474,29 +627,127 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
           ),
 
-          // ── Banner panduan ────────────────────────────────────
+          // ── Kotak pencarian + banner panduan ──────────────────
           Positioned(
             top: 12,
             left: 16,
             right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.touch_app, color: Colors.white, size: 18),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Geser peta untuk menempatkan pin tepat di lokasi Anda',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+            child: Column(
+              children: [
+                // Kotak pencarian titik alamat
+                Material(
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(10),
+                  child: TextField(
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: _onSearchChanged,
+                    onSubmitted: (_) => _searchLocation(),
+                    decoration: InputDecoration(
+                      hintText: 'Cari nama tempat / alamat...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _isSearching
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : (_searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () {
+                                    _debounce?.cancel();
+                                    _searchController.clear();
+                                    setState(() => _suggestions = []);
+                                  },
+                                )
+                              : null),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                  ),
+                ),
+                // Daftar sugesti (autocomplete) di bawah kotak pencarian
+                if (_suggestions.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: _suggestions.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final s = _suggestions[i];
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.location_on_outlined,
+                              color: Colors.red),
+                          title: Text(
+                            s.primary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: s.secondary.isNotEmpty
+                              ? Text(
+                                  s.secondary,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                )
+                              : null,
+                          onTap: () => _selectSuggestion(s),
+                        );
+                      },
+                    ),
+                  )
+                else ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.touch_app, color: Colors.white, size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Ketik untuk cari alamat, atau geser peta untuk menempatkan pin',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
           ),
         ],

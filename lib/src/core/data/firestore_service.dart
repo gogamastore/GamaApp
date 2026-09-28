@@ -350,7 +350,12 @@ class FirestoreService {
     }
 
     final newAddressRef = _userAddressesRef(uid).doc();
-    batch.set(newAddressRef, address.toMap());
+    // Sertakan created_at agar struktur dokumen sama dengan web reseller
+    // (halaman web mengurutkan alamat pakai orderBy('created_at') → dokumen
+    // tanpa field ini tidak akan muncul di daftar web).
+    final data = address.toMap();
+    data['created_at'] = FieldValue.serverTimestamp();
+    batch.set(newAddressRef, data);
 
     return batch.commit();
   }
