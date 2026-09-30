@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../application/checkout_provider.dart';
+import '../../../profile/presentation/add_edit_address_screen.dart';
 
 /// Menampilkan detail pengiriman (read-only) berdasarkan alamat tersimpan
 /// yang dipilih + satu field opsional catatan untuk kurir.
@@ -81,7 +82,25 @@ class _DeliveryInfoWidgetState extends State<DeliveryInfoWidget> {
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: () => context.push('/profile/address'),
+              // Dibuka lewat Navigator (bukan context.push ke rute shell
+              // /profile/address, yang menghasilkan halaman kosong dari
+              // checkout). Setelah alamat tersimpan → kembali ke keranjang
+              // agar pengecekan stok dijalankan ulang sebelum checkout.
+              onPressed: () async {
+                final saved = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                      builder: (_) => const AddEditAddressScreen()),
+                );
+                if (saved != true || !context.mounted) return;
+                // POP layar checkout (bukan go, yang mereset stack sehingga
+                // tombol kembali di keranjang error "nothing to pop"). Checkout
+                // di-push dari keranjang, jadi pop → kembali ke keranjang.
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/cart');
+                }
+              },
               icon: const Icon(Icons.add_location_alt_outlined, size: 18),
               label: const Text('Tambah Alamat'),
             ),

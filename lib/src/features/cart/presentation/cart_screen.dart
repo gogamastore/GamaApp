@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../application/cart_provider.dart';
+import '../../authentication/data/auth_service.dart';
+import '../../profile/presentation/edit_profile_screen.dart';
 
 // Model UI-spesifik untuk item keranjang.
 class CartItemUI {
@@ -71,6 +73,53 @@ class _CartScreenState extends State<CartScreen> {
   final Set<String> _outOfStockProductIds = {};
   bool _isCheckingStock = false;
 
+  // Wajib verifikasi WhatsApp sebelum checkout. Dibaca live dari
+  // user/{uid}.whatsappStatus (currentUser bisa basi setelah verifikasi).
+  Future<bool> _isWhatsappVerified() async {
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return false;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('user')
+          .doc(uid)
+          .get();
+      final d = snap.data() ?? {};
+      final status =
+          (d['whatsappStatus'] ?? d['WhatsappStatus'] ?? '').toString();
+      return status == 'verified';
+    } catch (_) {
+      return true; // jangan blokir keras bila cek gagal (mis. offline)
+    }
+  }
+
+  void _showWhatsappGate() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Verifikasi WhatsApp Diperlukan'),
+        content: const Text(
+          'Verifikasi nomor WhatsApp Anda di halaman profil terlebih dahulu '
+          'untuk dapat melakukan checkout.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Nanti'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const EditProfileScreen(),
+              ));
+            },
+            child: const Text('Verifikasi Sekarang'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleCheckout() async {
     final cart = context.read<CartProvider>();
     if (cart.items.isEmpty || _isCheckingStock) {
@@ -81,6 +130,14 @@ class _CartScreenState extends State<CartScreen> {
       _isCheckingStock = true;
       _outOfStockProductIds.clear();
     });
+
+    // ── Gate: wajib verifikasi WhatsApp sebelum checkout ──────────
+    if (!await _isWhatsappVerified()) {
+      if (!mounted) return;
+      setState(() => _isCheckingStock = false);
+      _showWhatsappGate();
+      return;
+    }
 
     final List<CartItemUI> outOfStockItems = [];
     final firestore = FirebaseFirestore.instance;

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../authentication/data/auth_service.dart';
 import '../application/address_provider.dart';
@@ -20,11 +19,14 @@ class AddEditAddressScreen extends StatefulWidget {
 
 class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   final _formKey = GlobalKey<FormState>();
-  late String _label, _name;
   late bool _isDefault;
   bool _isLoading = false;
 
-  // Controller untuk field yang bisa diisi otomatis dari Maps
+  // Semua field teks pakai controller agar nilainya PASTI tersimpan dan tidak
+  // hilang saat form rebuild (mis. setelah kembali dari peta) — sebelumnya
+  // label/nama pakai initialValue+onSaved sehingga label bisa hilang.
+  late TextEditingController _labelController;
+  late TextEditingController _nameController;
   late TextEditingController _addressController;
   late TextEditingController _cityController;
   late TextEditingController _phoneController;
@@ -59,10 +61,11 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
             ? profileWa
             : '62';
 
-    _label = widget.address?.label ?? '';
-    _name = widget.address?.name ?? defaultName;
     _isDefault = widget.address?.isDefault ?? false;
 
+    _labelController = TextEditingController(text: widget.address?.label ?? '');
+    _nameController =
+        TextEditingController(text: widget.address?.name ?? defaultName);
     _addressController =
         TextEditingController(text: widget.address?.address ?? '');
     _cityController = TextEditingController(text: widget.address?.city ?? '');
@@ -97,6 +100,8 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
 
   @override
   void dispose() {
+    _labelController.dispose();
+    _nameController.dispose();
     _addressController.dispose();
     _cityController.dispose();
     _phoneController.dispose();
@@ -161,12 +166,12 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
 
     final addressProvider = context.read<AddressProvider>();
     final messenger = ScaffoldMessenger.of(context);
-    final router = GoRouter.of(context);
+    final navigator = Navigator.of(context);
 
     final newAddress = Address(
       id: _isEditing ? widget.address!.id : '',
-      label: _label,
-      name: _name,
+      label: _labelController.text.trim(),
+      name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
       address: _addressController.text.trim(),
       city: _cityController.text.trim(),
@@ -187,7 +192,9 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       } else {
         await addressProvider.addAddress(newAddress);
       }
-      if (mounted) router.pop();
+      // pop(true) → penanda "alamat tersimpan" untuk pemanggil (mis. checkout
+      // yang lalu mengarahkan ke keranjang).
+      if (mounted) navigator.pop(true);
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
@@ -295,27 +302,25 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
             const SizedBox(height: 12),
 
             TextFormField(
-              initialValue: _label,
+              controller: _labelController,
               decoration: const InputDecoration(
                 labelText: 'Label Alamat',
                 hintText: 'Contoh: Rumah, Kantor',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.bookmark_outline),
               ),
-              onSaved: (v) => _label = v ?? '',
               validator: (v) =>
                   (v == null || v.isEmpty) ? 'Label tidak boleh kosong' : null,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
-              initialValue: _name,
+              controller: _nameController,
               decoration: const InputDecoration(
                 labelText: 'Nama Penerima',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person_outline),
               ),
-              onSaved: (v) => _name = v ?? '',
               validator: (v) =>
                   (v == null || v.isEmpty) ? 'Nama tidak boleh kosong' : null,
             ),
