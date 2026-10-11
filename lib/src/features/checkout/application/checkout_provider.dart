@@ -9,6 +9,7 @@ import '../../authentication/data/auth_service.dart';
 import '../../cart/application/cart_provider.dart' show CartProvider;
 import '../../profile/domain/address.dart';
 import '../domain/bank_account.dart';
+import '../domain/payment_channel.dart';
 import '../domain/shipping_option.dart';
 import '../data/biteship_service.dart';
 import '../data/payment_service.dart';
@@ -69,7 +70,14 @@ class CheckoutProvider with ChangeNotifier {
   ];
 
   ShippingOption? _selectedShipping;
-  String _selectedPaymentMethod = 'bank_transfer';
+  // 'midtrans' = pembayaran online (channel di `_selectedChannel`), 'cod' =
+  // bayar di tempat (khusus Ambil di Toko).
+  String _selectedPaymentMethod = 'midtrans';
+  // Channel Midtrans terpilih (Transfer Bank / E-wallet / QRIS).
+  PaymentChannel? _selectedChannel;
+  // Konfigurasi metode pembayaran (settings/payment_methods).
+  final Map<String, bool> _paymentEnabled = {};
+  final Map<String, num> _paymentFees = {'bank': 0, 'ewallet': 0, 'qris': 0};
   Address? _selectedAddress;
   final DeliveryInfo _deliveryInfo = DeliveryInfo();
   XFile? _paymentProofImage;
@@ -172,9 +180,35 @@ class CheckoutProvider with ChangeNotifier {
     return f;
   }
 
+  // ── Metode pembayaran (Midtrans channel + biaya layanan) ──────
+  PaymentChannel? get selectedChannel => _selectedChannel;
+
+  bool isChannelEnabled(PaymentChannel ch) =>
+      _paymentEnabled[ch.id] ?? ch.defaultEnabled;
+
+  List<PaymentChannel> enabledChannels(PaymentCategory category) =>
+      kPaymentChannels
+          .where((ch) => ch.category == category && isChannelEnabled(ch))
+          .toList();
+
+  double categoryFeeOf(PaymentCategory category) {
+    final v = _paymentFees[category.key];
+    return (v != null && v > 0) ? v.toDouble() : 0;
+  }
+
+  /// Biaya layanan pembayaran (per kategori) — hanya untuk pembayaran online.
+  double get paymentFee =>
+      (_selectedPaymentMethod == 'midtrans' && _selectedChannel != null)
+          ? categoryFeeOf(_selectedChannel!.category)
+          : 0;
+
   double get grandTotal {
-    final t =
-        subtotal + shippingCost - voucherDiscount + adminFee + serviceFee;
+    final t = subtotal +
+        shippingCost -
+        voucherDiscount +
+        adminFee +
+        serviceFee +
+        paymentFee;
     return t < 0 ? 0 : t;
   }
 
@@ -222,6 +256,7 @@ class CheckoutProvider with ChangeNotifier {
     await _fetchUserAddresses();
     await _loadVouchers();
     await _loadAdminFees();
+    await _loadPaymentConfig();
     _isInitializing = false;
     developer.log(
       'Initialization complete. Found ${_userAddresses.length} addresses.',
@@ -360,6 +395,36 @@ class CheckoutProvider with ChangeNotifier {
     }
   }
 
+  /// Muat konfigurasi metode pembayaran (settings/payment_methods):
+  /// channel aktif + biaya layanan per kategori.
+  Future<void> _loadPaymentConfig() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('payment_methods')
+          .get();
+      final d = snap.data();
+      if (d != null) {
+        final enabled = d['enabled'];
+        if (enabled is Map) {
+          enabled.forEach((k, v) {
+            if (v is bool) _paymentEnabled['$k'] = v;
+          });
+        }
+        final fees = d['fees'];
+        if (fees is Map) {
+          for (final key in ['bank', 'ewallet', 'qris']) {
+            final v = fees[key];
+            if (v is num) _paymentFees[key] = v;
+          }
+        }
+      }
+    } catch (e) {
+      developer.log('Error loading payment config',
+          name: 'CheckoutProvider', error: e);
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Method utama: load rates untuk alamat tertentu
   //
@@ -484,8 +549,15 @@ class CheckoutProvider with ChangeNotifier {
   }
 
   void selectPaymentMethod(String method) {
-    if (_selectedPaymentMethod == method) return;
     _selectedPaymentMethod = method;
+    if (method == 'cod') _selectedChannel = null;
+    notifyListeners();
+  }
+
+  /// Pilih channel Midtrans (Transfer Bank / E-wallet / QRIS).
+  void selectChannel(PaymentChannel channel) {
+    _selectedChannel = channel;
+    _selectedPaymentMethod = 'midtrans';
     notifyListeners();
   }
 
@@ -762,6 +834,16 @@ class CheckoutProvider with ChangeNotifier {
           'biteshipServiceName': _selectedBiteshipRate!.serviceName,
           'destinationAreaId': _selectedDestinationArea?.id ?? '',
         },
+        // Channel Midtrans terpilih → fungsi createMidtransTransaction
+        // membatasi enabled_payments ke 1 channel. Kosong untuk COD.
+        'paymentChannelCode':
+            _selectedPaymentMethod == 'cod' ? null : _selectedChannel?.code,
+        'paymentChannelName':
+            _selectedPaymentMethod == 'cod' ? null : _selectedChannel?.name,
+        'paymentCategory': _selectedPaymentMethod == 'cod'
+            ? null
+            : _selectedChannel?.category.key,
+        'paymentFee': paymentFee,
         'subtotal': subtotal,
         'voucherCode': _selectedVoucher?.code,
         'voucherDiscount': voucherDiscount,

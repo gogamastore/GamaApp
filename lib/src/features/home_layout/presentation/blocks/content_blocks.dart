@@ -533,29 +533,38 @@ class ImageBlockView extends StatelessWidget {
     if (url.isEmpty) return const SizedBox.shrink();
     final link = c.string('link', '');
     final radius = BorderRadius.circular(c.number('radius', 12));
+    // Tinggi tetap (px) seperti banner bila > 0; selain itu ikut rasio.
+    final height = c.number('height', 0).toDouble();
+    // Lebar penuh halaman → tanpa padding samping (full-bleed seperti banner).
+    final fullWidth = c.boolean('fullWidth', false);
+
+    final image = CachedNetworkImage(
+      imageUrl: url,
+      fit: c.string('fit', 'cover') == 'contain' ? BoxFit.contain : BoxFit.cover,
+      placeholder: (context, url) => ColoredBox(color: Colors.grey.shade200),
+      errorWidget: (context, url, error) => ColoredBox(
+        color: Colors.grey.shade200,
+        child: const Icon(Icons.broken_image, color: Colors.grey),
+      ),
+    );
+    final sized = height > 0
+        ? SizedBox(height: height, width: double.infinity, child: image)
+        : AspectRatio(
+            aspectRatio: c.number('aspectRatio', 2).clamp(0.3, 5).toDouble(),
+            child: image,
+          );
 
     return BlockFrame(
       block: block,
       child: Padding(
-        padding: _horizontal(block),
+        padding: fullWidth ? EdgeInsets.zero : _horizontal(block),
         child: ClipRRect(
           borderRadius: radius,
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
               onTap: link.trim().isEmpty ? null : () => openAppLink(context, link),
-              child: AspectRatio(
-                aspectRatio: c.number('aspectRatio', 2).clamp(0.3, 5).toDouble(),
-                child: CachedNetworkImage(
-                  imageUrl: url,
-                  fit: c.string('fit', 'cover') == 'contain' ? BoxFit.contain : BoxFit.cover,
-                  placeholder: (context, url) => ColoredBox(color: Colors.grey.shade200),
-                  errorWidget: (context, url, error) => ColoredBox(
-                    color: Colors.grey.shade200,
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
-              ),
+              child: sized,
             ),
           ),
         ),

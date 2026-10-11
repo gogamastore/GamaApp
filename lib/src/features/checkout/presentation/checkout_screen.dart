@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
 import '../application/checkout_provider.dart';
+import '../domain/payment_channel.dart';
 import '../../cart/application/cart_provider.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../../core/data/firestore_service.dart';
@@ -355,42 +356,34 @@ class CheckoutScreen extends StatelessWidget {
         children: [
           _sectionTitle('Metode Pembayaran'),
 
-          // Midtrans
-          _buildPaymentOption(
-            context,
-            value: 'midtrans',
-            icon: Icons.payment,
-            iconColor: Colors.blue,
-            title: 'Bayar via Midtrans',
-            subtitle: 'GoPay · QRIS · VA Bank · Kartu Kredit · Minimarket',
-            selectedValue: provider.selectedPaymentMethod,
-            onTap: () => context
-                .read<CheckoutProvider>()
-                .selectPaymentMethod('midtrans'),
-          ),
-
-          if (provider.selectedPaymentMethod == 'midtrans') ...[
+          // Kategori online: Transfer Bank / E-wallet / QRIS (hanya yang punya
+          // ≥1 channel aktif di settings/payment_methods).
+          if (provider.enabledChannels(PaymentCategory.bank).isNotEmpty)
+            _buildPaymentCategory(
+              context,
+              category: PaymentCategory.bank,
+              icon: Icons.account_balance,
+              iconColor: Colors.indigo,
+              subtitle: 'Virtual Account — pilih bank',
+            ),
+          if (provider.enabledChannels(PaymentCategory.ewallet).isNotEmpty) ...[
             const SizedBox(height: 10),
-            _buildMidtransGrid(),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 14, color: Colors.blue[700]),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Halaman pembayaran akan terbuka setelah Anda menekan "Buat Pesanan & Bayar"',
-                      style: TextStyle(fontSize: 11, color: Colors.blue[700]),
-                    ),
-                  ),
-                ],
-              ),
+            _buildPaymentCategory(
+              context,
+              category: PaymentCategory.ewallet,
+              icon: Icons.account_balance_wallet,
+              iconColor: Colors.deepPurple,
+              subtitle: 'GoPay · ShopeePay · OVO — pilih dompet',
+            ),
+          ],
+          if (provider.enabledChannels(PaymentCategory.qris).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _buildPaymentCategory(
+              context,
+              category: PaymentCategory.qris,
+              icon: Icons.qr_code_2,
+              iconColor: Colors.teal,
+              subtitle: 'Scan QR dari semua aplikasi pembayaran',
             ),
           ],
 
@@ -410,6 +403,145 @@ class CheckoutScreen extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Kartu kategori pembayaran. Bank & E-wallet → buka sheet pilih channel;
+  /// QRIS → langsung terpilih. Menampilkan biaya layanan ("Gratis Fee" bila 0).
+  Widget _buildPaymentCategory(
+    BuildContext context, {
+    required PaymentCategory category,
+    required IconData icon,
+    required Color iconColor,
+    required String subtitle,
+  }) {
+    final provider = context.watch<CheckoutProvider>();
+    final currency =
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final isSelected = provider.selectedPaymentMethod == 'midtrans' &&
+        provider.selectedChannel?.category == category;
+    final selectedName =
+        isSelected ? provider.selectedChannel?.name : null;
+    final fee = provider.categoryFeeOf(category);
+    final feeLabel = fee > 0 ? currency.format(fee) : 'Gratis Fee';
+
+    void onTap() {
+      if (category == PaymentCategory.qris) {
+        final list = provider.enabledChannels(category);
+        if (list.isNotEmpty) {
+          context.read<CheckoutProvider>().selectChannel(list.first);
+        }
+      } else {
+        _showChannelSheet(context, category);
+      }
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? iconColor.withValues(alpha: 0.07) : Colors.grey[50],
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? iconColor : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(category.label,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? iconColor : null)),
+                  Text(selectedName != null ? 'Dipilih: $selectedName' : subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(feeLabel,
+                      style: TextStyle(fontSize: 10, color: Colors.grey[700])),
+                ),
+                const SizedBox(height: 4),
+                Icon(
+                  isSelected ? Icons.check_circle : Icons.chevron_right,
+                  color: isSelected ? iconColor : Colors.grey[400],
+                  size: 20,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet daftar channel aktif untuk kategori Bank / E-wallet.
+  void _showChannelSheet(BuildContext context, PaymentCategory category) {
+    final provider = context.read<CheckoutProvider>();
+    final channels = provider.enabledChannels(category);
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Text('Pilih ${category.label}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            ...channels.map((ch) => ListTile(
+                  leading: Icon(
+                    category == PaymentCategory.bank
+                        ? Icons.account_balance
+                        : Icons.account_balance_wallet,
+                    color: Colors.indigo,
+                  ),
+                  title: Text(ch.name),
+                  subtitle: ch.id == 'ovo'
+                      ? const Text('Diproses via QRIS',
+                          style: TextStyle(fontSize: 11))
+                      : null,
+                  trailing: provider.selectedChannel?.id == ch.id
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : null,
+                  onTap: () {
+                    context.read<CheckoutProvider>().selectChannel(ch);
+                    Navigator.of(sheetContext).pop();
+                  },
+                )),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
@@ -654,47 +786,6 @@ class CheckoutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMidtransGrid() {
-    final methods = [
-      ('GoPay', Icons.account_balance_wallet, Colors.green),
-      ('ShopeePay', Icons.shopping_bag, Colors.orange),
-      ('QRIS', Icons.qr_code, Colors.purple),
-      ('BCA VA', Icons.account_balance, Colors.blue),
-      ('BNI VA', Icons.account_balance, Colors.orange[700]!),
-      ('BRI VA', Icons.account_balance, Colors.blue[800]!),
-      ('Mandiri', Icons.account_balance, Colors.yellow[800]!),
-      ('Indomaret', Icons.store, Colors.red),
-      ('Alfamart', Icons.store, Colors.red[800]!),
-      ('Kartu Kredit', Icons.credit_card, Colors.teal),
-    ];
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: methods
-          .map((m) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: m.$3.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: m.$3.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(m.$2, size: 13, color: m.$3),
-                    const SizedBox(width: 4),
-                    Text(m.$1,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: m.$3,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ))
-          .toList(),
-    );
-  }
 
   // ─────────────────────────────────────────────────────────────
   // Section 5: Ringkasan pesanan
@@ -857,6 +948,20 @@ class CheckoutScreen extends StatelessWidget {
               ],
             ),
           ],
+          if (provider.selectedPaymentMethod == 'midtrans' &&
+              provider.selectedChannel != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Biaya Layanan Pembayaran',
+                    style: TextStyle(color: Colors.grey[600])),
+                Text(provider.paymentFee > 0
+                    ? currency.format(provider.paymentFee)
+                    : 'Gratis Fee'),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -963,6 +1068,15 @@ class CheckoutScreen extends StatelessWidget {
     if (!hasShipping) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Pilih layanan pengiriman terlebih dahulu.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+
+    if (provider.selectedPaymentMethod != 'cod' &&
+        provider.selectedChannel == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Pilih metode pembayaran (Transfer Bank / E-wallet / QRIS).'),
         backgroundColor: Colors.orange,
       ));
       return;

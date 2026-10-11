@@ -756,6 +756,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             if (_order.serviceFee > 0)
               _buildInfoRow(
                   'Biaya Layanan', _currency.format(_order.serviceFee)),
+            if (_order.paymentFee > 0)
+              _buildInfoRow('Biaya Layanan Pembayaran',
+                  _currency.format(_order.paymentFee)),
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
