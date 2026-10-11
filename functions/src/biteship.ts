@@ -356,6 +356,14 @@ export const createBiteshipOrder = onCall(
     const isInstant = INSTANT_COURIERS.includes(
       (order.biteshipCourierCode ?? "").toLowerCase()
     );
+    // Diagnostik: log nilai koordinat SEBELUM throw agar jelas sisi mana yang
+    // 0 (origin = secret, dest = field order). Memastikan diagnosis instan.
+    logger.info(
+      `createBiteshipOrder coords: order=${orderId}, courier=${order.biteshipCourierCode}, ` +
+      `isInstant=${isInstant}, origin=(${originLat},${originLng}) hasOrigin=${hasOriginCoords}, ` +
+      `dest=(${destLat},${destLng}) hasDest=${hasDestCoords}, ` +
+      `rawDest=(${order.destinationLatitude},${order.destinationLongitude})`
+    );
     if (isInstant && !(hasOriginCoords && hasDestCoords)) {
       throw new HttpsError(
         "failed-precondition",
@@ -389,7 +397,10 @@ export const createBiteshipOrder = onCall(
         courier_company: order.biteshipCourierCode,
         courier_type: order.biteshipServiceCode,
         courier_insurance: 0,
-        delivery_type: isInstant ? "now" : "scheduled",
+        // "now" untuk semua kurir: kurir reguler (JNE, AnterAja, dll) tidak
+        // mendukung "scheduled" tanpa delivery_date/time → error 40002007
+        // "Courier is not available for scheduled delivery".
+        delivery_type: "now",
         order_note: `Order #${orderId} dari Gogama Store`,
         metadata: { orderId },
         items: (order.products as any[]).map((p: any) => ({
@@ -465,6 +476,12 @@ export const createBiteshipOrder = onCall(
         biteshipCourierTrackingId: courierTrackingId,
         deliveryTrackingUrl: trackingUrl,
         status: "shipped",
+        // Waktu pesanan DIPROSES admin (klik "Proses Pesanan"). Dipakai
+        // laporan penjualan agar pesanan terhitung pada hari diproses, bukan
+        // pada tanggal pembeli membuatnya. Ditulis atomik bersama status
+        // "shipped"; guard "Cegah double booking" di atas memastikan ini
+        // hanya terset sekali (klik ulang langsung return).
+        validatedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -535,7 +552,9 @@ export const trackBiteshipOrder = onCall(
         biteshipStatus: biteshipData.status,
         updatedAt: FieldValue.serverTimestamp(),
       };
-      if (newStatus && newStatus !== order.status) updateFields.status = newStatus;
+      if (newStatus && newStatus !== order.status && shouldApplyStatus(order.status, newStatus)) {
+        updateFields.status = newStatus;
+      }
       // Isi waybillId jika Firestore masih kosong tapi Biteship sudah punya
       if (freshWaybillId && !order.waybillId) updateFields.waybillId = freshWaybillId;
       // Isi biteshipCourierTrackingId jika belum ada
@@ -613,6 +632,7 @@ export const biteshipWebhook = onRequest(
       }
 
       const orderDoc = orderQuery.docs[0];
+      const currentStatus = orderDoc.data()?.status as string | undefined;
       const newOrderStatus = mapBiteshipStatus(event.order?.status);
       // Resi ada di courier.waybill_id
       const waybillId = (event.order?.courier?.waybill_id ?? event.order?.waybill_id) as string | undefined;
@@ -622,7 +642,10 @@ export const biteshipWebhook = onRequest(
         updatedAt: FieldValue.serverTimestamp(),
       };
 
-      if (newOrderStatus) updateData.status = newOrderStatus;
+      // Hanya terapkan bila maju (jangan turunkan pesanan yang sudah shipped).
+      if (newOrderStatus && shouldApplyStatus(currentStatus, newOrderStatus)) {
+        updateData.status = newOrderStatus;
+      }
       if (waybillId) updateData.waybillId = waybillId;
       if (event.order?.courier?.tracking_id) {
         const tid = event.order.courier.tracking_id as string;
@@ -650,4 +673,24 @@ function mapBiteshipStatus(s?: string): string | null {
   if (lower.includes("delivered")) return "delivered";
   if (lower.includes("cancelled") || lower.includes("failed") || lower.includes("returned")) return "cancelled";
   return null;
+}
+
+// Cegah status "mundur". createBiteshipOrder langsung men-set "shipped", jadi
+// event webhook/tracking "allocating" (→ "processing") TIDAK boleh menurunkan
+// pesanan yang sudah "shipped" kembali ke "Perlu Dikirim" (khusus kurir instan).
+// Aturan: "delivered"/"cancelled" bersifat final; "cancelled" boleh dari status
+// aktif; selain itu hanya boleh maju (rank naik).
+const STATUS_RANK: Record<string, number> = {
+  pending: 0,
+  processing: 1,
+  shipped: 2,
+  delivered: 3,
+};
+function shouldApplyStatus(current: string | undefined, next: string): boolean {
+  const c = (current ?? "").toLowerCase();
+  if (c === "delivered" || c === "cancelled") return false; // final
+  if (next === "cancelled") return true;
+  const cr = STATUS_RANK[c] ?? -1;
+  const nr = STATUS_RANK[next] ?? -1;
+  return nr > cr;
 }

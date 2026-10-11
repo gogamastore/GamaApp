@@ -24,8 +24,11 @@ import '../../features/profile/presentation/add_edit_address_screen.dart';
 import '../../features/profile/presentation/contact_screen.dart';
 import '../../features/profile/presentation/help_center_screen.dart';
 import '../../features/products/domain/product.dart';
+import '../../features/products/presentation/brands_list_screen.dart';
 import '../../features/products/presentation/catalog_screen.dart';
+import '../../features/products/presentation/categories_list_screen.dart';
 import '../../features/products/presentation/product_detail_screen.dart';
+import '../../features/home_layout/presentation/product_collection_screen.dart';
 import '../widgets/scaffold_with_nav_bar.dart';
 
 class AppRouter {
@@ -184,6 +187,31 @@ class AppRouter {
             return ProductDetailScreen(productId: productId);
           }
         },
+      ),
+      // Halaman "Lihat Semua" untuk blok beranda (App Builder).
+      GoRoute(
+        path: '/collection',
+        name: 'collection',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return ProductCollectionScreen(
+            title: q['title'] ?? 'Produk',
+            source: q['source'] ?? 'latest',
+            category: q['category'] ?? '',
+            brandId: q['brandId'] ?? '',
+          );
+        },
+      ),
+      // Halaman "Lihat Semua" brand & kategori (App Builder).
+      GoRoute(
+        path: '/brands',
+        name: 'brands',
+        builder: (context, state) => const BrandsListScreen(),
+      ),
+      GoRoute(
+        path: '/categories',
+        name: 'categories',
+        builder: (context, state) => const CategoriesListScreen(),
       ),
       GoRoute(
         path: '/cart',

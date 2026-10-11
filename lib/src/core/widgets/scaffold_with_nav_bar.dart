@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../features/authentication/data/auth_service.dart';
 import '../../features/cart/application/cart_provider.dart';
 import '../../features/chat/data/chat_service.dart';
+import '../../features/home_layout/application/app_layout_provider.dart';
 import '../../features/notifications/data/order_notification_service.dart';
 import 'promo_popup.dart';
 
@@ -34,9 +35,20 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   @override
   Widget build(BuildContext context) {
     final navigationShell = widget.navigationShell;
+    final design = context.watch<AppLayoutProvider>().design;
+    final titleText = Text(design.appTitle);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manafidh Store'),
+        // Judul / logo & posisi diatur dari App Builder di web admin.
+        title: design.showLogo && design.logoUrl.isNotEmpty
+            ? Image.network(
+                design.logoUrl,
+                height: 34,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => titleText,
+              )
+            : titleText,
+        centerTitle: design.centerTitle,
         actions: const [
           _CartIconButton(),
           _ChatIconButton(),
@@ -63,7 +75,8 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
           ),
         ],
         currentIndex: navigationShell.currentIndex,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
+        selectedItemColor:
+            design.navSelectedColor ?? Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey, // Make unselected items clearer
         type: BottomNavigationBarType.fixed, // Prevent items from shifting
         onTap: (int index) {

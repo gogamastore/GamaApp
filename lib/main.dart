@@ -12,10 +12,10 @@ import 'src/core/update/update_gate.dart';
 import 'src/features/cart/application/cart_provider.dart';
 import 'src/features/authentication/data/auth_service.dart';
 import 'src/core/data/firestore_service.dart';
-import 'src/core/theme/theme_provider.dart';
 import 'src/features/profile/application/address_provider.dart';
 import 'src/features/authentication/presentation/splash_screen.dart';
 import 'src/features/products/application/promotion_provider.dart'; // Impor baru
+import 'src/features/home_layout/application/app_layout_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -115,6 +115,10 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<AuthService>.value(value: authService),
         Provider<FirestoreService>(create: (_) => FirestoreService()),
+        // Desain & susunan beranda dari App Builder (web admin), real-time.
+        ChangeNotifierProvider<AppLayoutProvider>(
+          create: (_) => AppLayoutProvider(),
+        ),
         // --- PENAMBAHAN PROVIDER PROMOSI ---
         ChangeNotifierProvider<PromotionProvider>(
           create: (context) => PromotionProvider(context.read<FirestoreService>()),
@@ -139,15 +143,19 @@ class MyApp extends StatelessWidget {
                   authService: auth),
         ),
       ],
-      child: MaterialApp.router(
-        routerConfig: appRouter.router,
-        title: 'Manafidh Store',
-        theme: ThemeProvider.lightTheme,
-        debugShowCheckedModeBanner: false,
-        // Gate pemeriksa versi (paksa update bila versi usang) + gate Libur Toko
-        // (pemberitahuan non-dismissible saat admin mengaktifkan Libur).
-        builder: (context, child) => UpdateGate(
-          child: StoreClosedGate(child: child ?? const SizedBox.shrink()),
+      // Hanya MaterialApp yang dibangun ulang saat tema berubah; appRouter
+      // tetap instance yang sama sehingga posisi navigasi tidak hilang.
+      child: Consumer<AppLayoutProvider>(
+        builder: (context, layout, _) => MaterialApp.router(
+          routerConfig: appRouter.router,
+          title: layout.design.appTitle,
+          theme: layout.theme,
+          debugShowCheckedModeBanner: false,
+          // Gate pemeriksa versi (paksa update bila versi usang) + gate Libur Toko
+          // (pemberitahuan non-dismissible saat admin mengaktifkan Libur).
+          builder: (context, child) => UpdateGate(
+            child: StoreClosedGate(child: child ?? const SizedBox.shrink()),
+          ),
         ),
       ),
     );

@@ -43,6 +43,7 @@ class FirestoreService {
   Future<Brand> _transformBrand(Brand brand) async {
     final logoUrl = await _getDownloadUrl(brand.logoUrl);
     return Brand(
+      id: brand.id,
       name: brand.name,
       logoUrl: logoUrl,
     );
@@ -64,8 +65,76 @@ class FirestoreService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) =>
-            snapshot.docs.map((doc) => Brand.fromMap(doc.data())).toList())
+            snapshot.docs.map((doc) => Brand.fromMap(doc.data(), id: doc.id)).toList())
         .asyncMap((brands) => Future.wait(brands.map(_transformBrand)));
+  }
+
+  /// Nama kategori produk (koleksi `product_categories`, dikelola web admin).
+  Stream<List<String>> getCategoryNamesStream() {
+    return _db
+        .collection('product_categories')
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => (doc.data()['name'] as String? ?? '').trim())
+            .where((name) => name.isNotEmpty)
+            .toList());
+  }
+
+  /// Kategori produk lengkap (nama + ikon gambar opsional) untuk halaman
+  /// "Lihat Semua" kategori.
+  Stream<List<({String id, String name, String imageUrl})>> getCategoriesStream() {
+    return _db
+        .collection('product_categories')
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) {
+              final data = doc.data();
+              return (
+                id: doc.id,
+                name: (data['name'] as String? ?? '').trim(),
+                imageUrl: (data['imageUrl'] as String? ?? '').trim(),
+              );
+            })
+            .where((c) => c.name.isNotEmpty)
+            .toList());
+  }
+
+  /// Produk untuk blok produk di beranda (App Builder) dan halaman
+  /// "Lihat Semua". [source]: trending | promo | latest | category | brand.
+  ///
+  /// Untuk trending & promo seluruh daftar diambil (jumlahnya kecil dan
+  /// dikurasi admin); pemotongan [limit], filter stok & urutan dilakukan
+  /// oleh pemanggil.
+  Stream<List<Product>> getProductsForSource({
+    required String source,
+    String category = '',
+    String brandId = '',
+    int limit = 10,
+  }) {
+    switch (source) {
+      case 'trending':
+        return getTrendingProductsStream();
+      case 'promo':
+        return getPromoProductsStream()
+            .map((items) => items.map((item) => item.product).toList());
+    }
+
+    Query<Map<String, dynamic>> query = _db.collection('products');
+    if (source == 'category') {
+      if (category.isEmpty) return Stream.value(const []);
+      query = query.where('category', isEqualTo: category);
+    } else if (source == 'brand') {
+      if (brandId.isEmpty) return Stream.value(const []);
+      query = query.where('brandId', isEqualTo: brandId);
+    } else {
+      // 'latest': produk yang paling baru dibeli/restock.
+      query = query.orderBy('purchaseAt', descending: true);
+    }
+
+    return query.limit(limit).snapshots().asyncMap((snapshot) => Future.wait(
+        snapshot.docs.map((doc) => _transformProduct(Product.fromFirestore(doc)))));
   }
 
   Stream<List<Product>> getProductsStream() {

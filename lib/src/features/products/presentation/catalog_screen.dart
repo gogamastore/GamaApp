@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/data/firestore_service.dart';
+import '../../home_layout/application/app_layout_provider.dart';
+import '../../home_layout/domain/app_layout.dart';
+import '../../home_layout/presentation/blocks/product_block.dart';
+import '../../home_layout/presentation/widgets/configurable_product_card.dart';
 import '../domain/product.dart';
 import 'widgets/product_card.dart';
 import 'widgets/product_list_card.dart';
@@ -28,6 +32,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Konfigurasi App Builder (settings/app_layout → catalog). Hanya dipakai
+    // untuk tampilan GRID saat admin sudah mem-Publish; tampilan LIST tetap
+    // memakai ProductListCard bawaan.
+    final appLayout = context.watch<AppLayoutProvider>();
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 8,
@@ -142,6 +150,15 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
           // Tampilan GRID (default) atau LIST sesuai toggle — data sama.
           if (_isGridView) {
+            // Bila admin sudah mem-Publish App Builder, grid mengikuti tipe
+            // layout + gaya kartu dari konfigurasi; jika belum, pakai bawaan.
+            if (appLayout.hasConfig) {
+              return _buildConfiguredCatalog(
+                context,
+                products,
+                appLayout.layout.catalog,
+              );
+            }
             return Padding(
               padding: const EdgeInsets.all(8.0),
               child: GridView.builder(
@@ -169,4 +186,106 @@ class _CatalogScreenState extends State<CatalogScreen> {
       ),
     );
   }
+
+  /// Merender daftar katalog sesuai `CatalogConfig` (tipe layout + kartu).
+  /// Grid & list dibuat lazy (builder) agar katalog panjang tetap ringan;
+  /// staggered/quilted memakai [ProductLayoutView] di dalam area gulir.
+  Widget _buildConfiguredCatalog(
+    BuildContext context,
+    List<Product> products,
+    CatalogConfig catalog,
+  ) {
+    final style = catalog.card;
+    final spacing = catalog.spacing;
+
+    switch (catalog.layout) {
+      case ProductLayout.listTile:
+        return ListView.separated(
+          padding: const EdgeInsets.all(8),
+          itemCount: products.length,
+          separatorBuilder: (_, __) => SizedBox(height: spacing),
+          itemBuilder: (context, i) =>
+              ProductListTileCard(product: products[i], style: style),
+        );
+
+      case ProductLayout.simpleList:
+        return ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: products.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, i) =>
+              ProductSimpleRow(product: products[i], style: style),
+        );
+
+      case ProductLayout.staggered:
+      case ProductLayout.quilted:
+        // Kedua layout ini butuh tinggi semua kartu sekaligus → render penuh
+        // di dalam SingleChildScrollView (jarang dipakai untuk katalog besar).
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: LayoutBuilder(
+            builder: (context, cons) => ProductLayoutView(
+              products: products,
+              config: _toBlockConfig(catalog),
+              paddingH: 8,
+              fullWidth: cons.maxWidth,
+            ),
+          ),
+        );
+
+      case ProductLayout.grid:
+      default:
+        final cols = catalog.gridColumns.clamp(1, 4);
+        return LayoutBuilder(
+          builder: (context, cons) {
+            final itemWidth =
+                (cons.maxWidth - 16 - spacing * (cols - 1)) / cols;
+            return GridView.builder(
+              padding: const EdgeInsets.all(8),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                crossAxisSpacing: spacing,
+                mainAxisSpacing: spacing,
+                childAspectRatio: _gridAspect(style, itemWidth),
+              ),
+              itemCount: products.length,
+              itemBuilder: (context, i) => ConfigurableProductCard(
+                product: products[i],
+                style: style,
+                fillHeight: true,
+                compact: itemWidth < 120,
+              ),
+            );
+          },
+        );
+    }
+  }
+
+  /// Rasio lebar:tinggi tiap sel grid agar gambar + info muat tanpa overflow.
+  double _gridAspect(ProductCardStyle s, double width) {
+    var info = 24.0; // padding kartu
+    if (s.showCategory) info += 15;
+    if (s.showTitle) info += 17.0 * s.titleMaxLines;
+    if (s.showStock) info += 16;
+    if (s.showPrice || s.showCartButton) info += 42;
+    final h = width / (s.imageRatio <= 0 ? 1 : s.imageRatio) + info;
+    return width / h;
+  }
+
+  /// Membungkus [CatalogConfig] menjadi [ProductBlockConfig] agar bisa memakai
+  /// ulang [ProductLayoutView] (staggered/quilted). Field data tidak relevan.
+  ProductBlockConfig _toBlockConfig(CatalogConfig c) => ProductBlockConfig(
+        source: 'latest',
+        category: '',
+        brandId: '',
+        limit: 1 << 20,
+        sort: 'default',
+        hideOutOfStock: false,
+        layout: c.layout,
+        gridColumns: c.gridColumns,
+        rows: 1,
+        spacing: c.spacing,
+        autoSlide: false,
+        card: c.card,
+      );
 }

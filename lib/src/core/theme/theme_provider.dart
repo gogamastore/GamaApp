@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// This class is now a simple container for the application's light theme data.
+import '../../features/home_layout/domain/app_layout.dart';
+
+// Membangun ThemeData aplikasi. Nilai warna & font bisa diubah admin dari
+// App Builder (web) — lihat AppLayoutProvider.
 class ThemeProvider {
   // Warna brand utama (pink) — dipakai AppBar & tombol utama
   static const Color brandPink = Color(0xFFFF5FB4);
@@ -9,33 +12,57 @@ class ThemeProvider {
   // Warna item terpilih di bottom navigation bar
   static const Color bottomNavSelected = Color(0xFFEA4CA1);
 
-  static final ThemeData lightTheme = ThemeData(
-    colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.blue, brightness: Brightness.light),
-    useMaterial3: true,
-    brightness: Brightness.light,
-    scaffoldBackgroundColor: const Color(0xFFF5F5F7),
-    textTheme: GoogleFonts.poppinsTextTheme(),
-    appBarTheme: AppBarTheme(
-      backgroundColor: const Color.fromARGB(255, 252, 74, 169),
-      titleTextStyle: GoogleFonts.poppins(
-          fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-      elevation: 0,
-      iconTheme: const IconThemeData(color: Colors.white),
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      selectedItemColor: bottomNavSelected,
-      unselectedItemColor: Colors.grey,
-      showUnselectedLabels: true,
-      type: BottomNavigationBarType.fixed,
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        foregroundColor: Colors.white,
-        backgroundColor: brandPink,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(vertical: 15),
+  static final ThemeData lightTheme = buildTheme(AppDesign.defaults);
+
+  static ThemeData buildTheme(AppDesign design) {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+          seedColor: design.seedColor, brightness: Brightness.light),
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: design.backgroundColor,
+      textTheme: _textTheme(design.fontFamily),
+      appBarTheme: AppBarTheme(
+        backgroundColor: design.appBarColor,
+        titleTextStyle: _font(
+          design.fontFamily,
+          const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ).copyWith(color: design.appBarTextColor),
+        elevation: 0,
+        iconTheme: IconThemeData(color: design.appBarTextColor),
       ),
-    ),
-  );
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        selectedItemColor: design.navSelectedColor ?? bottomNavSelected,
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: design.buttonColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(vertical: 15),
+        ),
+      ),
+    );
+  }
+
+  // GoogleFonts melempar exception bila nama font tidak dikenal → kembali ke
+  // Poppins (font bawaan aplikasi).
+  static TextTheme _textTheme(String fontFamily) {
+    try {
+      return GoogleFonts.getTextTheme(fontFamily);
+    } catch (_) {
+      return GoogleFonts.poppinsTextTheme();
+    }
+  }
+
+  static TextStyle _font(String fontFamily, TextStyle style) {
+    try {
+      return GoogleFonts.getFont(fontFamily, textStyle: style);
+    } catch (_) {
+      return GoogleFonts.poppins(textStyle: style);
+    }
+  }
 }
