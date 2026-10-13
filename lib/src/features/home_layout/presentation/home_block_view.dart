@@ -16,6 +16,7 @@ class HomeBlockView extends StatelessWidget {
       HomeBlockType.banner => BannerBlockView(block: block),
       HomeBlockType.brands => BrandsBlockView(block: block),
       HomeBlockType.categories => CategoriesBlockView(block: block),
+      HomeBlockType.parentCategories => ParentCategoriesBlockView(block: block),
       HomeBlockType.products => ProductBlockView(block: block),
       HomeBlockType.search => SearchBlockView(block: block),
       HomeBlockType.text => TextBlockView(block: block),

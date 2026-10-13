@@ -7,6 +7,7 @@ import '../../home_layout/domain/app_layout.dart';
 import '../../home_layout/presentation/blocks/product_block.dart';
 import '../../home_layout/presentation/widgets/configurable_product_card.dart';
 import '../domain/product.dart';
+import 'parent_subcategories_screen.dart';
 import 'widgets/product_card.dart';
 import 'widgets/product_list_card.dart';
 
@@ -81,6 +82,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
             onPressed: () => setState(() => _isGridView = !_isGridView),
           ),
         ],
+        // Bar Induk Kategori menempel di app bar bila diaktifkan admin
+        // (blok Induk Kategori + "Tampilkan di halaman Katalog").
+        bottom: _catalogParentBar(appLayout),
       ),
       body: StreamBuilder<List<Product>>(
         stream: _productsStream,
@@ -288,4 +292,115 @@ class _CatalogScreenState extends State<CatalogScreen> {
         autoSlide: false,
         card: c.card,
       );
+
+  /// Bar Induk Kategori yang menempel di app bar katalog — hanya bila admin
+  /// mengaktifkan blok Induk Kategori + "Tampilkan di halaman Katalog".
+  PreferredSizeWidget? _catalogParentBar(AppLayoutProvider appLayout) {
+    final blocks = appLayout.layout.blocks.where((b) =>
+        b.type == HomeBlockType.parentCategories &&
+        b.enabled &&
+        b.config.boolean('showInCatalog', false));
+    if (blocks.isEmpty) return null;
+    final block = blocks.first;
+    final style = block.config.string('style', 'circle');
+    final limit = block.config.integer('limit', 12).clamp(1, 50);
+    final order = block.config.stringList('order');
+    final chip = style == 'chip';
+    final image = style == 'image'; // PNG datar tanpa lingkaran
+    final height = chip ? 52.0 : 76.0;
+    final color = Theme.of(context).colorScheme.primary;
+
+    void open(({String id, String name, String imageUrl}) p) =>
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) =>
+              ParentSubcategoriesScreen(parentId: p.id, parentName: p.name),
+        ));
+
+    return PreferredSize(
+      preferredSize: Size.fromHeight(height),
+      child: Container(
+        color: Colors.white,
+        height: height,
+        child: StreamBuilder<List<({String id, String name, String imageUrl})>>(
+          stream: _firestoreService.getParentCategoriesStream(),
+          builder: (context, snap) {
+            final parents =
+                orderByIds(snap.data ?? const [], (p) => p.id, order).take(limit).toList();
+            if (parents.isEmpty) return const SizedBox.shrink();
+            return ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              itemCount: parents.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final p = parents[i];
+                if (chip) {
+                  return Center(
+                    child: Material(
+                      color: Colors.white,
+                      shape: StadiumBorder(side: BorderSide(color: color.withValues(alpha: 0.4))),
+                      child: InkWell(
+                        customBorder: const StadiumBorder(),
+                        onTap: () => open(p),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Center(
+                            child: Text(p.name,
+                                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return SizedBox(
+                  width: 58,
+                  child: InkWell(
+                    onTap: () => open(p),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          alignment: Alignment.center,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: image
+                              ? const BoxDecoration()
+                              : BoxDecoration(
+                                  color: color.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                          child: p.imageUrl.isNotEmpty
+                              ? Image.network(p.imageUrl,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (c, e, s) => Text(
+                                      p.name.characters.first.toUpperCase(),
+                                      style: TextStyle(color: color, fontWeight: FontWeight.bold)))
+                              : Container(
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(p.name.characters.first.toUpperCase(),
+                                      style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                                ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10)),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
 }

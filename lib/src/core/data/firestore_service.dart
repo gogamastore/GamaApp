@@ -69,6 +69,15 @@ class FirestoreService {
         .asyncMap((brands) => Future.wait(brands.map(_transformBrand)));
   }
 
+  /// Ambil SATU brand berdasarkan id (untuk menampilkan brand di detail produk).
+  /// Mengembalikan null bila id kosong / dokumen tidak ada.
+  Future<Brand?> getBrand(String brandId) async {
+    if (brandId.isEmpty) return null;
+    final doc = await _db.collection('brands').doc(brandId).get();
+    if (!doc.exists) return null;
+    return _transformBrand(Brand.fromMap(doc.data()!, id: doc.id));
+  }
+
   /// Nama kategori produk (koleksi `product_categories`, dikelola web admin).
   Stream<List<String>> getCategoryNamesStream() {
     return _db
@@ -99,6 +108,34 @@ class FirestoreService {
             })
             .where((c) => c.name.isNotEmpty)
             .toList());
+  }
+
+  /// Induk kategori (koleksi `category_parents`) untuk blok "Induk Kategori".
+  Stream<List<({String id, String name, String imageUrl})>> getParentCategoriesStream() {
+    return _db
+        .collection('category_parents')
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) {
+              final data = doc.data();
+              return (
+                id: doc.id,
+                name: (data['name'] as String? ?? '').trim(),
+                imageUrl: (data['imageUrl'] as String? ?? '').trim(),
+              );
+            })
+            .where((p) => p.name.isNotEmpty)
+            .toList());
+  }
+
+  /// Satu induk kategori (nama + daftar sub-kategori) untuk layar sub-kategori.
+  Future<({String name, List<String> children})?> getParentCategory(String id) async {
+    final doc = await _db.collection('category_parents').doc(id).get();
+    if (!doc.exists) return null;
+    final data = doc.data()!;
+    final children = (data['children'] as List?)?.whereType<String>().toList() ?? <String>[];
+    return (name: (data['name'] as String? ?? '').trim(), children: children);
   }
 
   /// Produk untuk blok produk di beranda (App Builder) dan halaman

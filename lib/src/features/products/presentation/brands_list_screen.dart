@@ -50,12 +50,15 @@ class BrandsListScreen extends StatelessWidget {
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.all(10),
-                          child: Image.network(
-                            brand.logoUrl,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.business, color: Colors.grey, size: 32),
-                          ),
+                          child: brand.logoUrl.isEmpty
+                              ? const Center(
+                                  child: Icon(Icons.business, color: Colors.grey, size: 32))
+                              : Image.network(
+                                  brand.logoUrl,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(Icons.business, color: Colors.grey, size: 32),
+                                ),
                         ),
                       ),
                       Padding(

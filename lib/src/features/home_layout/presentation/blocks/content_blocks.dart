@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/data/firestore_service.dart';
 import '../../../products/domain/banner_item.dart';
 import '../../../products/domain/brand.dart';
+import '../../../products/presentation/parent_subcategories_screen.dart';
 import '../../../products/presentation/widgets/banner_carousel.dart';
 import '../../domain/app_layout.dart';
 import '../block_frame.dart';
@@ -94,6 +95,11 @@ class _BrandsBlockViewState extends State<BrandsBlockView> {
   }
 
   Widget _logo(Brand brand, double size) {
+    // Brand tanpa logo (mis. dibuat cepat dari form produk) → ikon, bukan
+    // Image.network('') yang memicu error.
+    if (brand.logoUrl.isEmpty) {
+      return Icon(Icons.business, color: Colors.grey, size: size * 0.4);
+    }
     return Image.network(
       brand.logoUrl,
       fit: BoxFit.contain,
@@ -432,6 +438,206 @@ class _CategoriesBlockViewState extends State<CategoriesBlockView> {
           onSeeAll: () => context.push('/categories'),
           child: child,
         );
+      },
+    );
+  }
+}
+
+// ─── Induk Kategori ────────────────────────────────────────────────────────
+
+class ParentCategoriesBlockView extends StatefulWidget {
+  final HomeBlock block;
+
+  const ParentCategoriesBlockView({super.key, required this.block});
+
+  @override
+  State<ParentCategoriesBlockView> createState() =>
+      _ParentCategoriesBlockViewState();
+}
+
+class _ParentCategoriesBlockViewState extends State<ParentCategoriesBlockView> {
+  late final Stream<List<({String id, String name, String imageUrl})>> _stream =
+      context.read<FirestoreService>().getParentCategoriesStream();
+
+  void _open(({String id, String name, String imageUrl}) p) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) =>
+          ParentSubcategoriesScreen(parentId: p.id, parentName: p.name),
+    ));
+  }
+
+  Widget _avatar(({String id, String name, String imageUrl}) p, Color color, double size) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _open(p),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: p.imageUrl.isNotEmpty
+                ? Image.network(
+                    p.imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stack) => Text(
+                      p.name.characters.first.toUpperCase(),
+                      style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: size * 0.4),
+                    ),
+                  )
+                : Text(
+                    p.name.characters.first.toUpperCase(),
+                    style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: size * 0.4),
+                  ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            p.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11, height: 1.2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Kartu gaya "image" — gambar PNG datar (tanpa lingkaran), digeser.
+  Widget _imageCard(({String id, String name, String imageUrl}) p, Color color, double size) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _open(p),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: size,
+            height: size,
+            child: p.imageUrl.isNotEmpty
+                ? Image.network(
+                    p.imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stack) => _letterBox(p, color, size),
+                  )
+                : _letterBox(p, color, size),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            p.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11, height: 1.2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _letterBox(({String id, String name, String imageUrl}) p, Color color, double size) {
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+      child: Text(
+        p.name.characters.first.toUpperCase(),
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: size * 0.4),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.block.config;
+    final style = c.string('style', 'circle');
+    final columns = c.integer('columns', 4).clamp(2, 6);
+    final limit = c.integer('limit', 12).clamp(1, 50);
+    final itemSize = c.integer('itemSize', 64).clamp(36, 140).toDouble();
+    final order = c.stringList('order');
+    final color = Theme.of(context).colorScheme.primary;
+
+    return StreamBuilder<List<({String id, String name, String imageUrl})>>(
+      stream: _stream,
+      builder: (context, snapshot) {
+        final parents =
+            orderByIds(snapshot.data ?? const [], (p) => p.id, order).take(limit).toList();
+        if (parents.isEmpty) return const SizedBox.shrink();
+
+        Widget child;
+        if (style == 'grid') {
+          final rows = <Widget>[];
+          for (var i = 0; i < parents.length; i += columns) {
+            if (rows.isNotEmpty) rows.add(const SizedBox(height: 12));
+            rows.add(Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var k = 0; k < columns; k++)
+                  Expanded(
+                    child: i + k < parents.length
+                        ? _avatar(parents[i + k], color, 48)
+                        : const SizedBox.shrink(),
+                  ),
+              ],
+            ));
+          }
+          child = Padding(padding: _horizontal(widget.block), child: Column(children: rows));
+        } else if (style == 'image') {
+          child = SizedBox(
+            height: itemSize + 32,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: _horizontal(widget.block),
+              itemCount: parents.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, i) =>
+                  SizedBox(width: itemSize + 14, child: _imageCard(parents[i], color, itemSize)),
+            ),
+          );
+        } else if (style == 'chip') {
+          child = SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: _horizontal(widget.block),
+              itemCount: parents.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, i) => Material(
+                color: Colors.white,
+                shape: StadiumBorder(side: BorderSide(color: color.withValues(alpha: 0.35))),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: () => _open(parents[i]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Center(
+                      child: Text(parents[i].name,
+                          style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w500)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else {
+          child = SizedBox(
+            height: itemSize + 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: _horizontal(widget.block),
+              itemCount: parents.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, i) =>
+                  SizedBox(width: itemSize + 16, child: _avatar(parents[i], color, itemSize)),
+            ),
+          );
+        }
+        return BlockFrame(block: widget.block, child: child);
       },
     );
   }

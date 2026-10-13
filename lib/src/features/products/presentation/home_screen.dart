@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/widgets/whatsapp_verification_popup.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../home_layout/application/app_layout_provider.dart';
+import '../../home_layout/domain/app_layout.dart';
 import '../../home_layout/presentation/home_block_view.dart';
 
 /// Beranda. Susunan & tampilan bloknya diatur admin dari App Builder di web
@@ -48,17 +49,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final blocks = layoutProvider.layout.blocks.where((b) => b.enabled).toList();
 
+    // Blok "Induk Kategori" yang disematkan (pinned) ditarik keluar dari area
+    // scroll → tetap menempel di atas (sticky) saat halaman di-scroll.
+    bool isPinned(HomeBlock b) =>
+        b.type == HomeBlockType.parentCategories && b.config.boolean('pinned', false);
+    final pinned = blocks.where(isPinned).toList();
+    final scrolling = blocks.where((b) => !isPinned(b)).toList();
+
     // SingleChildScrollView (bukan ListView) supaya blok yang keluar layar
     // tidak di-dispose lalu berlangganan ulang ke Firestore saat kembali.
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final block in blocks)
-              HomeBlockView(key: ValueKey(block.id), block: block),
-          ],
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final block in pinned)
+            Material(
+              elevation: 1,
+              child: HomeBlockView(key: ValueKey(block.id), block: block),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final block in scrolling)
+                    HomeBlockView(key: ValueKey(block.id), block: block),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

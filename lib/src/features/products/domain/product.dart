@@ -10,6 +10,7 @@ class Product {
   final int stock;
   final int weightGram;
   final String sku;
+  final String brandId; // id dokumen `brands` (kosong = tanpa brand)
   final Timestamp? purchaseAt; // waktu terakhir dibeli/restock (untuk urutan katalog)
 
   Product({
@@ -22,6 +23,7 @@ class Product {
     required this.stock,
     this.weightGram = 0,
     this.sku = '',
+    this.brandId = '',
     this.purchaseAt,
   });
 
@@ -36,6 +38,7 @@ class Product {
     int? stock,
     int? weightGram,
     String? sku,
+    String? brandId,
     Timestamp? purchaseAt,
   }) {
     return Product(
@@ -48,6 +51,7 @@ class Product {
       stock: stock ?? this.stock,
       weightGram: weightGram ?? this.weightGram,
       sku: sku ?? this.sku,
+      brandId: brandId ?? this.brandId,
       purchaseAt: purchaseAt ?? this.purchaseAt,
     );
   }
@@ -64,6 +68,7 @@ class Product {
       'stock': stock,
       'weightGram': weightGram,
       'sku': sku,
+      'brandId': brandId,
     };
   }
 
@@ -94,6 +99,7 @@ class Product {
       // SKU/barcode bisa tersimpan sebagai int (mis. 8992821100422) ATAU
       // string di Firestore, jadi konversi apa pun ke String agar tidak error.
       sku: map['sku']?.toString() ?? '',
+      brandId: map['brandId'] as String? ?? '',
       purchaseAt: map['purchaseAt'] as Timestamp?,
     );
   }

@@ -6,9 +6,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/data/firestore_service.dart';
 import '../../../core/utils/admin_contact.dart';
+import '../domain/brand.dart';
 import '../domain/product.dart';
 import '../application/promotion_provider.dart';
 import '../../cart/application/cart_provider.dart';
+import '../../home_layout/presentation/block_frame.dart';
 import 'widgets/quantity_selector.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -273,9 +275,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text('·', style: TextStyle(color: Colors.grey[500])),
-                
+
                 ],
               ),
+
+              // --- Brand (bila ada) ---
+              _buildBrandSection(product, theme),
               const SizedBox(height: 16),
 
               // --- Blok harga ---
@@ -464,6 +469,79 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Kartu brand yang bisa diketuk → halaman produk brand tersebut.
+  /// Tidak tampil bila produk tak punya brand / brand tak ditemukan.
+  Widget _buildBrandSection(Product product, ThemeData theme) {
+    if (product.brandId.isEmpty) return const SizedBox.shrink();
+    final firestore = context.read<FirestoreService>();
+    return FutureBuilder<Brand?>(
+      future: firestore.getBrand(product.brandId),
+      builder: (context, snapshot) {
+        final brand = snapshot.data;
+        if (brand == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => context.push(
+              collectionLink(source: 'brand', brandId: brand.id, title: brand.name),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: brand.logoUrl.isNotEmpty
+                        ? Image.network(
+                            brand.logoUrl,
+                            fit: BoxFit.contain,
+                            errorBuilder: (c, e, s) =>
+                                Icon(Icons.business, color: theme.colorScheme.primary),
+                          )
+                        : Icon(Icons.business, color: theme.colorScheme.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Brand',
+                            style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600])),
+                        const SizedBox(height: 2),
+                        Text(
+                          brand.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text('Lihat produk',
+                      style: theme.textTheme.labelMedium
+                          ?.copyWith(color: theme.colorScheme.primary)),
+                  Icon(Icons.chevron_right, color: theme.colorScheme.primary),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -59,6 +59,31 @@ class ConfigMap {
     if (v is! List) return const [];
     return v.whereType<Map>().map(ConfigMap.from).toList();
   }
+
+  /// Daftar nilai String (mis. `order` untuk urutan induk kategori).
+  List<String> stringList(String key) {
+    final v = raw[key];
+    if (v is! List) return const [];
+    return v.whereType<String>().toList();
+  }
+}
+
+/// Mengurutkan [items] sesuai daftar id [order]. Id yang tidak ada di [order]
+/// diletakkan setelahnya dengan urutan aslinya — sehingga item baru tetap muncul
+/// tanpa admin harus menambahkannya ke urutan.
+List<T> orderByIds<T>(List<T> items, String Function(T) idOf, List<String> order) {
+  if (order.isEmpty) return items;
+  final byId = {for (final it in items) idOf(it): it};
+  final used = <String>{};
+  final result = <T>[];
+  for (final id in order) {
+    final it = byId[id];
+    if (it != null && used.add(id)) result.add(it);
+  }
+  for (final it in items) {
+    if (!used.contains(idOf(it))) result.add(it);
+  }
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -142,6 +167,7 @@ class HomeBlockType {
   static const banner = 'banner';
   static const brands = 'brands';
   static const categories = 'categories';
+  static const parentCategories = 'parentCategories';
   static const products = 'products';
   static const search = 'search';
   static const text = 'text';
@@ -150,7 +176,7 @@ class HomeBlockType {
   static const button = 'button';
 
   static const all = {
-    banner, brands, categories, products, search, text, image, spacer, button,
+    banner, brands, categories, parentCategories, products, search, text, image, spacer, button,
   };
 }
 
