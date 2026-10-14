@@ -14,6 +14,7 @@ import '../../features/products/domain/brand.dart';
 import '../../features/checkout/domain/bank_account.dart';
 import '../../features/profile/domain/address.dart';
 import '../../features/products/domain/promotion.dart';
+import '../../features/reviews/domain/review.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -76,6 +77,66 @@ class FirestoreService {
     final doc = await _db.collection('brands').doc(brandId).get();
     if (!doc.exists) return null;
     return _transformBrand(Brand.fromMap(doc.data()!, id: doc.id));
+  }
+
+  // ── Ulasan Pembeli ──────────────────────────────────────────────────
+
+  /// Ulasan sebuah produk (terbaru dulu) untuk ditampilkan di detail produk.
+  Stream<List<Review>> getProductReviewsStream(String productId, {int limit = 20}) {
+    if (productId.isEmpty) return Stream.value(const []);
+    return _db
+        .collection('reviews')
+        .where('productId', isEqualTo: productId)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => Review.fromFirestore(d)).toList());
+  }
+
+  /// Unggah satu foto ulasan ke Storage, kembalikan URL unduhannya.
+  Future<String> uploadReviewPhoto(String userId, XFile file) async {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref('review_images/$userId/${ts}_${file.name}');
+    final bytes = await file.readAsBytes();
+    await ref.putData(bytes);
+    return ref.getDownloadURL();
+  }
+
+  /// Kirim ulasan untuk beberapa produk dari satu pesanan. Menulis dokumen
+  /// `reviews/{orderId}_{productId}` + menandai pesanan `reviewed: true` dalam
+  /// satu batch; agregat rating produk (ratingSum/ratingCount) diperbarui best
+  /// effort (kegagalan satu produk tidak membatalkan ulasan).
+  Future<void> submitOrderReviews({
+    required String orderId,
+    required String userId,
+    required String userName,
+    required bool anonymous,
+    required List<ReviewDraft> drafts,
+  }) async {
+    final rated = drafts.where((d) => d.rating > 0).toList();
+    if (rated.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final d in rated) {
+      final ref = _db.collection('reviews').doc('${orderId}_${d.productId}');
+      batch.set(ref, {
+        'productId': d.productId,
+        'orderId': orderId,
+        'userId': userId,
+        'userName': userName,
+        'anonymous': anonymous,
+        'rating': d.rating,
+        'comment': d.comment.trim(),
+        'imageUrls': d.imageUrls,
+        'productName': d.productName,
+        'productImage': d.productImage,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    batch.update(_db.collection('orders').doc(orderId), {'reviewed': true});
+    await batch.commit();
+    // Agregat rating produk (ratingSum/ratingCount/ratingAvg) diperbarui oleh
+    // Cloud Function `onReviewWritten` saat dokumen ulasan ditulis.
   }
 
   /// Nama kategori produk (koleksi `product_categories`, dikelola web admin).

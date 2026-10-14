@@ -334,6 +334,37 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ),
               ],
+
+              // Tombol Nilai — pesanan selesai & belum diulas
+              if (order.isCompleted && !order.reviewed) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.star_border, size: 18),
+                    label: const Text('Nilai'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFD97706),
+                      side: const BorderSide(color: Color(0xFFFBBF24)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => context.push('/write-review', extra: order),
+                  ),
+                ),
+              ] else if (order.isCompleted && order.reviewed) ...[
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, size: 16, color: Colors.green[600]),
+                    const SizedBox(width: 6),
+                    Text('Sudah dinilai',
+                        style: TextStyle(fontSize: 12, color: Colors.green[700], fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

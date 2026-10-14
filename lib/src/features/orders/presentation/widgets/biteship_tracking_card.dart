@@ -164,6 +164,26 @@ class _BiteshipTrackingCardState extends State<BiteshipTrackingCard> {
                   ),
                 ),
               ),
+              // Info driver (untuk pengiriman instan: nama + nomor HP).
+              if ((info.driverName ?? '').isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.person, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        info.driverPhone?.isNotEmpty == true
+                            ? '${info.driverName} · ${info.driverPhone}'
+                            : info.driverName!,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -304,10 +324,14 @@ class _BiteshipTrackingCardState extends State<BiteshipTrackingCard> {
                       color: isFirst ? Colors.blue[700] : Colors.black87,
                     ),
                   ),
-                  if (h.note.isNotEmpty)
-                    Text(h.note,
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  // Keterangan Bahasa Indonesia; bila kosong pakai catatan asli.
+                  Builder(builder: (context) {
+                    final desc = _statusDesc(h.status);
+                    final text = desc.isNotEmpty ? desc : h.note;
+                    if (text.isEmpty) return const SizedBox.shrink();
+                    return Text(text,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]));
+                  }),
                   Text(formattedTime,
                       style: TextStyle(fontSize: 11, color: Colors.grey[500])),
                 ],
@@ -351,30 +375,52 @@ class _BiteshipTrackingCardState extends State<BiteshipTrackingCard> {
     );
   }
 
+  /// Judul status dalam Bahasa Indonesia — mengikuti istilah halaman tracking
+  /// Biteship (mis. "Pesanan Sedang Dalam Perjalanan").
+  static bool _has(String s, List<String> keys) => keys.any(s.contains);
+
+  // Kata kunci status Biteship per fase.
+  static const _kOnTheWay = ['dropping_off', 'in_transit', 'on_process', 'out_for_delivery', 'on_the_way', 'delivering'];
+  static const _kFailed = ['cancelled', 'canceled', 'rejected', 'failed', 'not_found'];
+
   String _statusLabel(String? status) {
-    if (status == null) return 'Memproses...';
+    if (status == null || status.isEmpty) return 'Memproses…';
     final s = status.toLowerCase();
-    if (s.contains('allocating') || s.contains('waiting'))
-      return 'Mencari kurir';
-    if (s.contains('picked_up') || s.contains('pickup'))
-      return 'Paket dijemput';
-    if (s.contains('in_transit') || s.contains('on_process'))
-      return 'Dalam perjalanan';
-    if (s.contains('delivered')) return 'Terkirim';
-    if (s.contains('cancelled') || s.contains('failed'))
-      return 'Gagal terkirim';
-    if (s.contains('returned')) return 'Dikembalikan';
+    if (s.contains('confirmed')) return 'Permintaan Pengiriman Telah Diterima';
+    if (_has(s, ['allocating', 'waiting'])) return 'Mencari Kurir';
+    if (s.contains('allocated')) return 'Permintaan Pengiriman Telah Diterima';
+    if (s.contains('picking_up') || s == 'pickup') return 'Pesanan Sedang Proses Penjemputan';
+    if (s.contains('picked')) return 'Pesanan Telah Dijemput';
+    if (_has(s, _kOnTheWay)) return 'Pesanan Sedang Dalam Perjalanan';
+    if (s.contains('delivered')) return 'Pesanan Telah Sampai Tujuan';
+    if (s.contains('hold')) return 'Pengiriman Tertunda';
+    if (s.contains('return')) return 'Paket Dikembalikan';
+    if (_has(s, _kFailed)) return 'Pengiriman Gagal / Dibatalkan';
     return status;
+  }
+
+  /// Keterangan status dalam Bahasa Indonesia (dipakai bila Biteship tidak
+  /// mengirim catatan).
+  String _statusDesc(String? status) {
+    final s = status?.toLowerCase() ?? '';
+    if (s.contains('confirmed')) return 'Pesanan kurir dikonfirmasi. Kurir telah diberi tahu untuk menjemput.';
+    if (_has(s, ['allocating', 'waiting'])) return 'Sedang mencari kurir terdekat.';
+    if (s.contains('allocated')) return 'Kurir telah dialokasikan. Menunggu dijemput.';
+    if (s.contains('picking_up') || s == 'pickup') return 'Kurir sedang menuju lokasi penjemputan.';
+    if (s.contains('picked')) return 'Paket telah dijemput kurir.';
+    if (_has(s, _kOnTheWay)) return 'Paket sedang menuju alamat tujuan.';
+    if (s.contains('delivered')) return 'Paket telah sampai di tujuan.';
+    if (s.contains('hold')) return 'Pengiriman tertunda sementara.';
+    if (s.contains('return')) return 'Paket dikembalikan ke pengirim.';
+    if (_has(s, _kFailed)) return 'Pengiriman dibatalkan atau gagal.';
+    return '';
   }
 
   Color _statusColor(String? status) {
     final s = status?.toLowerCase() ?? '';
     if (s.contains('delivered')) return Colors.green;
-    if (s.contains('cancelled') ||
-        s.contains('failed') ||
-        s.contains('returned')) return Colors.red;
-    if (s.contains('in_transit') || s.contains('on_process'))
-      return Colors.blue;
+    if (s.contains('return') || _has(s, _kFailed)) return Colors.red;
+    if (_has(s, _kOnTheWay)) return Colors.blue;
     return Colors.orange;
   }
 

@@ -115,6 +115,7 @@ class _BrandsBlockViewState extends State<BrandsBlockView> {
     final c = widget.block.config;
     final isCircle = c.string('style', 'card') == 'circle';
     final size = c.number('itemSize', 70).clamp(40, 140).toDouble();
+    final titleColor = widget.block.style.titleColor;
 
     return StreamBuilder<List<Brand>>(
       stream: _stream,
@@ -163,7 +164,7 @@ class _BrandsBlockViewState extends State<BrandsBlockView> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 11),
+                        style: TextStyle(fontSize: 11, color: titleColor),
                       ),
                     ],
                   ),
@@ -192,6 +193,7 @@ class _BrandsBlockViewState extends State<BrandsBlockView> {
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: titleColor),
                         ),
                       ),
                     ],
@@ -300,7 +302,7 @@ class _CategoriesBlockViewState extends State<CategoriesBlockView> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 11, height: 1.2),
+                      style: TextStyle(fontSize: 11, height: 1.2, color: widget.block.style.titleColor),
                     ),
                   ],
                 ),
@@ -342,7 +344,7 @@ class _CategoriesBlockViewState extends State<CategoriesBlockView> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, height: 1.2),
+            style: TextStyle(fontSize: 11, height: 1.2, color: widget.block.style.titleColor),
           ),
         ],
       ),
@@ -422,7 +424,7 @@ class _CategoriesBlockViewState extends State<CategoriesBlockView> {
                         names[i],
                         style: TextStyle(
                           fontSize: 13,
-                          color: color,
+                          color: widget.block.style.titleColor ?? color,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -502,7 +504,7 @@ class _ParentCategoriesBlockViewState extends State<ParentCategoriesBlockView> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, height: 1.2),
+            style: TextStyle(fontSize: 11, height: 1.2, color: widget.block.style.titleColor),
           ),
         ],
       ),
@@ -534,7 +536,7 @@ class _ParentCategoriesBlockViewState extends State<ParentCategoriesBlockView> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, height: 1.2),
+            style: TextStyle(fontSize: 11, height: 1.2, color: widget.block.style.titleColor),
           ),
         ],
       ),
@@ -617,7 +619,7 @@ class _ParentCategoriesBlockViewState extends State<ParentCategoriesBlockView> {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     child: Center(
                       child: Text(parents[i].name,
-                          style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w500)),
+                          style: TextStyle(fontSize: 13, color: widget.block.style.titleColor ?? color, fontWeight: FontWeight.w500)),
                     ),
                   ),
                 ),

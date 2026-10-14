@@ -53,6 +53,7 @@ class Order {
   final num adminFee;
   final num serviceFee;
   final num paymentFee;
+  final bool reviewed; // true jika pembeli sudah memberi ulasan
   final Timestamp? updatedAt;
 
   // ── Biteship fields ───────────────────────────────────────────
@@ -88,6 +89,7 @@ class Order {
     this.adminFee = 0,
     this.serviceFee = 0,
     this.paymentFee = 0,
+    this.reviewed = false,
     this.updatedAt,
     this.biteshipOrderId,
     this.biteshipCourierCode,
@@ -120,6 +122,10 @@ class Order {
       paymentStatus.toLowerCase() == 'settlement';
 
   int get totalProducts => products.fold(0, (sum, item) => sum + item.quantity);
+
+  /// True jika pesanan sudah selesai (bisa diberi ulasan).
+  bool get isCompleted =>
+      status.toLowerCase() == 'delivered' || status.toLowerCase() == 'selesai';
 
   /// Waktu aktivitas terakhir (perubahan status) untuk deteksi notifikasi
   /// "belum dilihat". Fallback ke tanggal order bila updatedAt tidak ada.
@@ -161,6 +167,7 @@ class Order {
       adminFee: _toNum(data['adminFee']),
       serviceFee: _toNum(data['serviceFee']),
       paymentFee: _toNum(data['paymentFee']),
+      reviewed: data['reviewed'] == true,
       updatedAt: data['updatedAt'] is Timestamp ? data['updatedAt'] as Timestamp : null,
       // Biteship
       biteshipOrderId: data['biteshipOrderId'] as String?,

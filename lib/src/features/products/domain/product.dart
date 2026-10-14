@@ -11,6 +11,8 @@ class Product {
   final int weightGram;
   final String sku;
   final String brandId; // id dokumen `brands` (kosong = tanpa brand)
+  final int ratingSum; // total bintang dari semua ulasan
+  final int ratingCount; // jumlah ulasan
   final Timestamp? purchaseAt; // waktu terakhir dibeli/restock (untuk urutan katalog)
 
   Product({
@@ -24,8 +26,13 @@ class Product {
     this.weightGram = 0,
     this.sku = '',
     this.brandId = '',
+    this.ratingSum = 0,
+    this.ratingCount = 0,
     this.purchaseAt,
   });
+
+  /// Rata-rata bintang (0 bila belum ada ulasan).
+  double get ratingAvg => ratingCount > 0 ? ratingSum / ratingCount : 0;
 
   // --- LOGIKA BARU DIMULAI DI SINI ---
   Product copyWith({
@@ -39,6 +46,8 @@ class Product {
     int? weightGram,
     String? sku,
     String? brandId,
+    int? ratingSum,
+    int? ratingCount,
     Timestamp? purchaseAt,
   }) {
     return Product(
@@ -52,6 +61,8 @@ class Product {
       weightGram: weightGram ?? this.weightGram,
       sku: sku ?? this.sku,
       brandId: brandId ?? this.brandId,
+      ratingSum: ratingSum ?? this.ratingSum,
+      ratingCount: ratingCount ?? this.ratingCount,
       purchaseAt: purchaseAt ?? this.purchaseAt,
     );
   }
@@ -100,6 +111,8 @@ class Product {
       // string di Firestore, jadi konversi apa pun ke String agar tidak error.
       sku: map['sku']?.toString() ?? '',
       brandId: map['brandId'] as String? ?? '',
+      ratingSum: (map['ratingSum'] as num? ?? 0).toInt(),
+      ratingCount: (map['ratingCount'] as num? ?? 0).toInt(),
       purchaseAt: map['purchaseAt'] as Timestamp?,
     );
   }

@@ -190,6 +190,7 @@ class BlockStyle {
   final Color? bgColor;
   final String bgImageUrl;
   final double radius;
+  final Color? titleColor; // null = warna teks default
 
   const BlockStyle({
     this.marginTop = 0,
@@ -200,6 +201,7 @@ class BlockStyle {
     this.bgColor,
     this.bgImageUrl = '',
     this.radius = 0,
+    this.titleColor,
   });
 
   factory BlockStyle.fromMap(dynamic value) {
@@ -213,6 +215,7 @@ class BlockStyle {
       bgColor: c.color('bgColor'),
       bgImageUrl: c.string('bgImageUrl', '').trim(),
       radius: c.number('radius', 0),
+      titleColor: c.color('titleColor'),
     );
   }
 }
@@ -280,6 +283,7 @@ class ProductCardStyle {
   final bool showStock;
   final bool showDiscountBadge;
   final bool showCartButton;
+  final bool showRating; // tampilkan rata-rata bintang + jumlah ulasan
   final Color? cardColor;
   final bool shadowEnabled;
   final double shadowBlur;
@@ -300,6 +304,7 @@ class ProductCardStyle {
     required this.showStock,
     required this.showDiscountBadge,
     required this.showCartButton,
+    this.showRating = false,
     required this.cardColor,
     required this.shadowEnabled,
     required this.shadowBlur,
@@ -322,6 +327,7 @@ class ProductCardStyle {
     showStock: true,
     showDiscountBadge: true,
     showCartButton: false,
+    showRating: false,
     cardColor: null,
     shadowEnabled: true,
     shadowBlur: 8,
@@ -345,6 +351,7 @@ class ProductCardStyle {
       showStock: c.boolean('showStock', true),
       showDiscountBadge: c.boolean('showDiscountBadge', true),
       showCartButton: c.boolean('showCartButton', false),
+      showRating: c.boolean('showRating', false),
       cardColor: c.color('cardColor'),
       shadowEnabled: c.boolean('shadowEnabled', true),
       shadowBlur: c.number('shadowBlur', 8).clamp(0, 40).toDouble(),

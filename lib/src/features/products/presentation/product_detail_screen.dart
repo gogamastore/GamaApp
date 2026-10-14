@@ -8,6 +8,7 @@ import '../../../core/data/firestore_service.dart';
 import '../../../core/utils/admin_contact.dart';
 import '../domain/brand.dart';
 import '../domain/product.dart';
+import '../../reviews/domain/review.dart';
 import '../application/promotion_provider.dart';
 import '../../cart/application/cart_provider.dart';
 import '../../home_layout/presentation/block_frame.dart';
@@ -266,16 +267,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(height: 8),
 
-              // --- Rating + terjual ---
+              // --- Rating (dari ulasan pembeli) ---
               Row(
                 children: [
-                  ...List.generate(
-                    5,
-                    (_) => const Icon(Icons.star, size: 16, color: Color(0xFFFBBF24)),
-                  ),
+                  _stars(product.ratingAvg.round(), size: 16),
                   const SizedBox(width: 8),
-                  Text('·', style: TextStyle(color: Colors.grey[500])),
-
+                  Text(
+                    product.ratingCount > 0
+                        ? '${product.ratingAvg.toStringAsFixed(1)} · ${product.ratingCount} ulasan'
+                        : 'Belum ada ulasan',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
                 ],
               ),
 
@@ -419,6 +421,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               _specRow(theme, 'Kategori', product.category.isNotEmpty ? product.category : '-'),
               _specRow(theme, 'Berat', weightLabel),
               _specRow(theme, 'Stok', stockAvailable ? '${product.stock} tersedia' : 'Habis'),
+
+              // --- Ulasan Pembeli ---
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 12),
+              _buildReviews(product, theme),
             ],
           ),
         ),
@@ -542,6 +550,129 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// Bintang kecil untuk menampilkan rating (bukan interaktif).
+  Widget _stars(int rating, {double size = 16}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(
+        5,
+        (i) => Icon(i < rating ? Icons.star : Icons.star_border,
+            size: size, color: const Color(0xFFFBBF24)),
+      ),
+    );
+  }
+
+  Widget _buildReviews(Product product, ThemeData theme) {
+    final firestore = context.read<FirestoreService>();
+    final avg = product.ratingAvg;
+    final count = product.ratingCount;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Ulasan Pembeli',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const Spacer(),
+            if (count > 0) ...[
+              const Icon(Icons.star, size: 18, color: Color(0xFFFBBF24)),
+              const SizedBox(width: 4),
+              Text(avg.toStringAsFixed(1),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('  ·  $count ulasan',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        StreamBuilder<List<Review>>(
+          stream: firestore.getProductReviewsStream(product.id),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            final reviews = snapshot.data ?? const <Review>[];
+            if (reviews.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text('Belum ada ulasan untuk produk ini.',
+                    style: TextStyle(color: Colors.grey[600])),
+              );
+            }
+            return Column(
+              children: reviews.map((r) => _reviewItem(r, theme)).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _reviewItem(Review r, ThemeData theme) {
+    final date = r.createdAt != null
+        ? DateFormat('d MMM yyyy', 'id_ID').format(r.createdAt!.toDate())
+        : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+                child: Text(
+                  (r.displayName.isNotEmpty ? r.displayName[0] : '?').toUpperCase(),
+                  style: TextStyle(
+                      color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(r.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+              Text(date, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _stars(r.rating, size: 14),
+          if (r.comment.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(r.comment, style: theme.textTheme.bodyMedium),
+          ],
+          if (r.imageUrls.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 64,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: r.imageUrls.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, i) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: r.imageUrls[i],
+                    width: 64,
+                    height: 64,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) =>
+                        Container(width: 64, height: 64, color: Colors.grey[200]),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const Divider(height: 20),
+        ],
+      ),
     );
   }
 

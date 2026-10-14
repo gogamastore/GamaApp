@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/admin_contact.dart';
 import '../../checkout/data/biteship_service.dart';
 import '../domain/order.dart';
+import 'widgets/biteship_status_labels.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final Order order;
@@ -532,6 +533,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   // ── Tracking ──────────────────────────────────────────────────
+  // Format waktu Biteship (ISO) → "d MMM HH:mm" lokal; fallback ke string asli.
+  String _formatTrackTime(String ts) {
+    try {
+      return DateFormat('d MMM HH:mm', 'id_ID').format(DateTime.parse(ts).toLocal());
+    } catch (_) {
+      return ts;
+    }
+  }
+
   Widget _buildTrackingSection() {
     if (_trackingError != null) {
       return Container(
@@ -580,13 +590,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.blue[50],
+                      color: biteshipStatusColor(info.status).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      info.status!.toUpperCase(),
+                      biteshipStatusLabel(info.status),
                       style: TextStyle(
-                          color: Colors.blue[700],
+                          color: biteshipStatusColor(info.status),
                           fontWeight: FontWeight.bold,
                           fontSize: 10),
                     ),
@@ -626,15 +636,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(h.status,
+                              Text(biteshipStatusLabel(h.status),
                                   style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500)),
-                              if (h.note.isNotEmpty)
-                                Text(h.note,
+                              Builder(builder: (context) {
+                                final desc = biteshipStatusDesc(h.status);
+                                final text = desc.isNotEmpty ? desc : h.note;
+                                if (text.isEmpty) return const SizedBox.shrink();
+                                return Text(text,
                                     style: TextStyle(
-                                        fontSize: 11, color: Colors.grey[500])),
-                              Text(h.timestamp,
+                                        fontSize: 11, color: Colors.grey[500]));
+                              }),
+                              Text(_formatTrackTime(h.timestamp),
                                   style: TextStyle(
                                       fontSize: 10, color: Colors.grey[400])),
                             ],

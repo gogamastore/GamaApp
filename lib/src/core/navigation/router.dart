@@ -16,6 +16,7 @@ import '../../features/checkout/presentation/payment_webview_screen.dart';
 import '../../features/orders/presentation/order_history_screen.dart';
 import '../../features/orders/presentation/order_detail_screen.dart';
 import '../../features/orders/domain/order.dart';
+import '../../features/reviews/presentation/write_review_screen.dart';
 import '../../features/profile/domain/address.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/edit_profile_screen.dart';
@@ -235,6 +236,14 @@ class AppRouter {
         builder: (context, state) {
           final order = state.extra as Order;
           return OrderDetailScreen(order: order);
+        },
+      ),
+      GoRoute(
+        path: '/write-review',
+        name: 'writeReview',
+        builder: (context, state) {
+          final order = state.extra as Order;
+          return WriteReviewScreen(order: order);
         },
       ),
       // Halaman pembayaran Midtrans (WebView). Dibuka dari checkout,

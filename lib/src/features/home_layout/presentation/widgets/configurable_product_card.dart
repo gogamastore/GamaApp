@@ -221,6 +221,21 @@ class _ProductInfo extends StatelessWidget {
           style: TextStyle(
               fontSize: titleSize, fontWeight: FontWeight.w600, height: 1.25),
         ),
+      if (style.showRating && product.ratingCount > 0)
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment:
+              centered ? MainAxisAlignment.center : MainAxisAlignment.start,
+          children: [
+            Icon(Icons.star, size: smallSize + 2, color: const Color(0xFFFBBF24)),
+            const SizedBox(width: 2),
+            Text(
+              '${product.ratingAvg.toStringAsFixed(1)} (${product.ratingCount})',
+              style: TextStyle(
+                  fontSize: smallSize, color: Colors.grey[700], fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       if (style.showStock)
         Text(
           isOutOfStock ? 'Stok Habis' : 'Stok: ${product.stock}',
