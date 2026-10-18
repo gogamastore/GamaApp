@@ -188,7 +188,7 @@ class CheckoutScreen extends StatelessWidget {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Section 2: Form alamat + search area Biteship manual
+  // Section 2: Form alamat + Estimasi Ongkir (area otomatis dari alamat)
   // ─────────────────────────────────────────────────────────────
   Widget _buildDeliveryFormSection(BuildContext context) {
     final provider = context.watch<CheckoutProvider>();
@@ -202,33 +202,64 @@ class CheckoutScreen extends StatelessWidget {
           const DeliveryInfoWidget(),
           const SizedBox(height: 16),
 
-          // Area tujuan Biteship — tersinkron otomatis dari alamat terpilih,
-          // tetap bisa diubah manual bila perlu.
-          BiteshipAreaSearchField(
-            label: 'Cari Kota / Kecamatan Tujuan',
-            onAreaSelected: (area) {
-              context.read<CheckoutProvider>().onDestinationAreaSelected(area);
-            },
-            initialArea: provider.selectedDestinationArea,
-          ),
-
-          // Info area yang sudah terpilih
-          if (provider.selectedDestinationArea != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.check_circle, size: 14, color: Colors.green[600]),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Tujuan: ${provider.selectedDestinationArea!.name}, '
-                    '${provider.selectedDestinationArea!.adminName}',
-                    style: TextStyle(fontSize: 12, color: Colors.green[700]),
+          // Estimasi Ongkir — area tujuan terdeteksi OTOMATIS dari alamat
+          // terpilih (tidak bisa diisi manual; samakan dengan halaman alamat web).
+          if (provider.selectedDestinationArea != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[100]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.location_on, size: 18, color: Colors.blue[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Area Ongkir (otomatis)',
+                            style:
+                                TextStyle(fontSize: 11, color: Colors.blue[700])),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${provider.selectedDestinationArea!.name}, '
+                          '${provider.selectedDestinationArea!.adminName}',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue[800]),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.amber[800]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Area ongkir terisi otomatis dari alamat terpilih. '
+                      'Pastikan titik lokasi alamat sudah benar.',
+                      style: TextStyle(fontSize: 12, color: Colors.amber[900]),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
         ],
       ),
     );
@@ -693,7 +724,7 @@ class CheckoutScreen extends StatelessWidget {
                                       Text(
                                         'Potongan $label'
                                         '${v.minPurchase > 0 ? ' · min. ${currency.format(v.minPurchase)}' : ''}'
-                                        '${v.dailyLimitPerUser > 0 ? ' · ${v.dailyLimitPerUser}×/hari' : ''}',
+                                        '${v.dailyLimitPerUser > 0 ? ' · ${v.dailyLimitPerUser}×/${v.isPerEvent ? 'event' : 'hari'}' : ''}',
                                         style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey[600]),

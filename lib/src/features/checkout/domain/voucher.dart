@@ -13,6 +13,7 @@ class Voucher {
   final DateTime? startDate;
   final DateTime? endDate;
   final int dailyLimitPerUser; // 0 = tanpa batas
+  final String limitType; // 'perDay' (per 24 jam) | 'perEvent' (seluruh event)
 
   const Voucher({
     required this.id,
@@ -25,7 +26,10 @@ class Voucher {
     this.startDate,
     this.endDate,
     this.dailyLimitPerUser = 0,
+    this.limitType = 'perDay',
   });
+
+  bool get isPerEvent => limitType == 'perEvent';
 
   factory Voucher.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -42,6 +46,7 @@ class Voucher {
       startDate: toDate(data['startDate']),
       endDate: toDate(data['endDate']),
       dailyLimitPerUser: (data['dailyLimitPerUser'] as num?)?.toInt() ?? 0,
+      limitType: data['limitType'] == 'perEvent' ? 'perEvent' : 'perDay',
     );
   }
 

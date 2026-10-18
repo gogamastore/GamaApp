@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/data/firestore_service.dart';
 import '../../../core/utils/admin_contact.dart';
+import '../../../core/utils/format_sold.dart';
 import '../domain/brand.dart';
 import '../domain/product.dart';
 import '../../reviews/domain/review.dart';
@@ -267,16 +268,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(height: 8),
 
-              // --- Rating (dari ulasan pembeli) ---
+              // --- Rating (dari ulasan pembeli) + jumlah terjual ---
               Row(
                 children: [
                   _stars(product.ratingAvg.round(), size: 16),
                   const SizedBox(width: 8),
-                  Text(
-                    product.ratingCount > 0
-                        ? '${product.ratingAvg.toStringAsFixed(1)} · ${product.ratingCount} ulasan'
-                        : 'Belum ada ulasan',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  Flexible(
+                    child: Text(
+                      [
+                        product.ratingCount > 0
+                            ? '${product.ratingAvg.toStringAsFixed(1)} · ${product.ratingCount} ulasan'
+                            : 'Belum ada ulasan',
+                        if (product.soldCount > 0) '${formatSold(product.soldCount)} terjual',
+                      ].join('  ·  '),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
                   ),
                 ],
               ),

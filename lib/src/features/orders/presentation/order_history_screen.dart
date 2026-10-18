@@ -390,6 +390,10 @@ class _OrderCard extends StatelessWidget {
 
   Widget _buildStatusBadge(String status) {
     final s = status.toLowerCase();
+    // Pengembalian (retur) dari kurir — badge terpisah dari "Dibatalkan".
+    if ((order.biteshipStatus ?? '').toLowerCase().contains('return')) {
+      return _Badge(label: 'Dikembalikan', color: Colors.amber[800]!);
+    }
     Color color;
     String label;
     if (s == 'pending') {

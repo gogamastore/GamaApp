@@ -100,7 +100,8 @@ class CheckoutProvider with ChangeNotifier {
   // ── Voucher ───────────────────────────────────────────────────
   List<Voucher> _vouchers = [];
   Voucher? _selectedVoucher;
-  Map<String, int> _voucherUsage = {}; // kode → jumlah pakai user 24 jam
+  Map<String, int> _voucherUsage = {}; // kode → jumlah pakai user 24 jam (per hari)
+  Map<String, int> _voucherUsageTotal = {}; // kode → total pakai non-batal (per event)
 
   // ── Biaya Admin & Layanan (settings/admin_fees) ───────────────
   bool _feesEnabled = false;
@@ -216,9 +217,13 @@ class CheckoutProvider with ChangeNotifier {
   /// disaring di [availableVouchers].
   String? voucherIneligibleReason(Voucher v) {
     if (subtotal < v.minPurchase) return 'Belanja belum memenuhi minimal';
-    if (v.dailyLimitPerUser > 0 &&
-        (_voucherUsage[v.code] ?? 0) >= v.dailyLimitPerUser) {
-      return 'Batas ${v.dailyLimitPerUser}×/hari sudah tercapai';
+    if (v.dailyLimitPerUser > 0) {
+      final used = (v.isPerEvent ? _voucherUsageTotal[v.code] : _voucherUsage[v.code]) ?? 0;
+      if (used >= v.dailyLimitPerUser) {
+        return v.isPerEvent
+            ? 'Batas ${v.dailyLimitPerUser}× per event sudah tercapai'
+            : 'Batas ${v.dailyLimitPerUser}×/hari sudah tercapai';
+      }
     }
     return null;
   }
@@ -328,8 +333,8 @@ class CheckoutProvider with ChangeNotifier {
     }
   }
 
-  /// Muat voucher AKTIF + hitung pemakaian user dalam 24 jam terakhir
-  /// (untuk batas pakai per user per hari).
+  /// Muat voucher AKTIF + hitung pemakaian user: per 24 jam (batas per hari)
+  /// dan total non-batal (batas per event).
   Future<void> _loadVouchers() async {
     try {
       final db = FirebaseFirestore.instance;
@@ -349,6 +354,7 @@ class CheckoutProvider with ChangeNotifier {
             .where('customerId', isEqualTo: user.uid)
             .get();
         final counts = <String, int>{};
+        final totals = <String, int>{};
         for (final o in ordersSnap.docs) {
           final data = o.data();
           final code = data['voucherCode'];
@@ -356,6 +362,8 @@ class CheckoutProvider with ChangeNotifier {
           if ((data['status'] ?? '').toString().toLowerCase() == 'cancelled') {
             continue;
           }
+          // Total (per event): semua order non-batal memakai kode ini.
+          totals[code] = (totals[code] ?? 0) + 1;
           DateTime? created;
           final c = data['createdAt'];
           final dt = data['date'];
@@ -368,6 +376,7 @@ class CheckoutProvider with ChangeNotifier {
           counts[code] = (counts[code] ?? 0) + 1;
         }
         _voucherUsage = counts;
+        _voucherUsageTotal = totals;
       }
     } catch (e) {
       developer.log('Error loading vouchers',

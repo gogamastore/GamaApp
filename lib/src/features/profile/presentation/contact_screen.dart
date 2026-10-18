@@ -1,6 +1,62 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+/// Satu entri kontak (dikelola admin dari web dashboard → "Contact Profil").
+class _ContactItem {
+  final String section;
+  final String type;
+  final String label;
+  final String url;
+  const _ContactItem({
+    required this.section,
+    required this.type,
+    required this.label,
+    required this.url,
+  });
+}
+
+/// Default — sama dengan kontak lama, dipakai sebagai fallback bila admin
+/// belum mengonfigurasi dokumen settings/contact_profile.
+const List<_ContactItem> _defaultContacts = [
+  _ContactItem(section: 'Akun Official Kami', type: 'instagram', label: 'manafidh_kosmetik', url: 'https://www.instagram.com/manafidh_kosmetik/'),
+  _ContactItem(section: 'Akun Official Kami', type: 'website', label: 'www.gogama.store', url: 'https://www.gogama.store/'),
+  _ContactItem(section: 'Akun Official Kami', type: 'tiktok', label: 'Gallery Makassar', url: 'https://www.tiktok.com/@gallery.makassar'),
+  _ContactItem(section: 'Akun Official Kami', type: 'shopee', label: 'manafidh_kosmetik', url: 'https://shope.ee/6Kbmbbr5pA'),
+  _ContactItem(section: 'Hubungi Kami Untuk Join Grosir', type: 'whatsapp', label: 'WA Komplain Shopee', url: 'http://wa.me/6289506991107'),
+  _ContactItem(section: 'Hubungi Kami Untuk Join Grosir', type: 'whatsapp', label: 'Admin Grosir 1', url: 'http://wa.me/6288705707321'),
+  _ContactItem(section: 'Hubungi Kami Untuk Join Grosir', type: 'whatsapp', label: 'Admin Grosir 2', url: 'http://wa.me/6289503674236'),
+  _ContactItem(section: 'Hubungi Kami Untuk Join Grosir', type: 'whatsapp', label: 'WA Lowongan Kerja', url: 'http://wa.me/6289636052501'),
+  _ContactItem(section: 'Offline Store', type: 'maps', label: 'Maps: Gallery Makassar', url: 'https://maps.app.goo.gl/BQmTCJBcVRaeU7wi9'),
+];
+
+FaIconData _iconForType(String type) {
+  switch (type) {
+    case 'whatsapp':
+      return FontAwesomeIcons.whatsapp;
+    case 'instagram':
+      return FontAwesomeIcons.instagram;
+    case 'tiktok':
+      return FontAwesomeIcons.tiktok;
+    case 'facebook':
+      return FontAwesomeIcons.facebook;
+    case 'youtube':
+      return FontAwesomeIcons.youtube;
+    case 'website':
+      return FontAwesomeIcons.globe;
+    case 'shopee':
+      return FontAwesomeIcons.bagShopping;
+    case 'maps':
+      return FontAwesomeIcons.mapLocationDot;
+    case 'email':
+      return FontAwesomeIcons.envelope;
+    case 'phone':
+      return FontAwesomeIcons.phone;
+    default:
+      return FontAwesomeIcons.globe;
+  }
+}
 
 class ContactScreen extends StatelessWidget {
   const ContactScreen({super.key});
@@ -12,12 +68,29 @@ class ContactScreen extends StatelessWidget {
     }
   }
 
+  List<_ContactItem> _parse(Map<String, dynamic>? data) {
+    final raw = (data?['items'] as List?) ?? const [];
+    final items = raw.whereType<Map>().map((m) {
+      return _ContactItem(
+        section: (m['section'] as String?)?.trim() ?? '',
+        type: (m['type'] as String?)?.trim() ?? 'website',
+        label: (m['label'] as String?)?.trim() ?? '',
+        url: (m['url'] as String?)?.trim() ?? '',
+      );
+    }).where((i) => i.label.isNotEmpty && i.url.isNotEmpty).toList();
+    return items.isNotEmpty ? items : _defaultContacts;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final docRef =
+        FirebaseFirestore.instance.collection('settings').doc('contact_profile');
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Hubungi Kami', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Hubungi Kami',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -32,69 +105,43 @@ class ContactScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            children: [
-              _buildSectionHeader('Akun Official Kami'),
-              ContactInfoTile(
-                icon: FontAwesomeIcons.instagram,
-                text: 'manafidh_kosmetik',
-                url: 'https://www.instagram.com/manafidh_kosmetik/',
-                onTap: () => _launchURL('https://www.instagram.com/manafidh_kosmetik/'),
-              ),
-              ContactInfoTile(
-                icon: FontAwesomeIcons.globe,
-                text: 'www.gogama.store',
-                url: 'https://www.gogama.store/',
-                onTap: () => _launchURL('https://www.gogama.store/'),
-              ),
-              ContactInfoTile(
-                icon: FontAwesomeIcons.tiktok,
-                text: 'Gallery Makassar',
-                url: 'https://www.tiktok.com/@gallery.makassar',
-                onTap: () => _launchURL('https://www.tiktok.com/@gallery.makassar'),
-              ),
-               ContactInfoTile(
-                icon: FontAwesomeIcons.shoppingBag,
-                text: 'manafidh_kosmetik',
-                url: 'https://shope.ee/6Kbmbbr5pA',
-                onTap: () => _launchURL('https://shope.ee/6Kbmbbr5pA'),
-              ),
-              const SizedBox(height: 20),
-              _buildSectionHeader('Hubungi Kami Untuk Join Grosir'),
-              ContactInfoTile(
-                icon: FontAwesomeIcons.whatsapp,
-                text: 'WA Komplain Shopee',
-                url: 'http://wa.me/6289506991107',
-                onTap: () => _launchURL('http://wa.me/6289506991107'),
-              ),
-              ContactInfoTile(
-                icon: FontAwesomeIcons.whatsapp,
-                text: 'Admin Grosir 1',
-                url: 'http://wa.me/6288705707321',
-                onTap: () => _launchURL('http://wa.me/6288705707321'),
-              ),
-               ContactInfoTile(
-                icon: FontAwesomeIcons.whatsapp,
-                text: 'Admin Grosir 2',
-                url: 'http://wa.me/6289503674236',
-                onTap: () => _launchURL('http://wa.me/6289503674236'),
-              ),
-               ContactInfoTile(
-                icon: FontAwesomeIcons.whatsapp,
-                text: 'WA Lowongan Kerja',
-                url: 'http://wa.me/6289636052501',
-                onTap: () => _launchURL('http://wa.me/6289636052501'),
-              ),
-              const SizedBox(height: 20),
-               _buildSectionHeader('Offline Store'),
-              ContactInfoTile(
-                icon: FontAwesomeIcons.mapMarkedAlt,
-                text: 'Maps: Gallery Makassar',
-                url: 'https://maps.app.goo.gl/BQmTCJBcVRaeU7wi9',
-                onTap: () => _launchURL('https://maps.app.goo.gl/BQmTCJBcVRaeU7wi9'),
-              ),
-            ],
+          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: docRef.snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                );
+              }
+
+              final items = _parse(snapshot.data?.data());
+
+              // Kelompokkan per section dengan mempertahankan urutan.
+              final groups = <String, List<_ContactItem>>{};
+              for (final it in items) {
+                final name = it.section.isEmpty ? 'Kontak' : it.section;
+                groups.putIfAbsent(name, () => []).add(it);
+              }
+
+              final children = <Widget>[];
+              groups.forEach((section, tiles) {
+                children.add(_buildSectionHeader(section));
+                for (final t in tiles) {
+                  children.add(ContactInfoTile(
+                    icon: _iconForType(t.type),
+                    text: t.label,
+                    onTap: () => _launchURL(t.url),
+                  ));
+                }
+                children.add(const SizedBox(height: 10));
+              });
+
+              return ListView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                children: children,
+              );
+            },
           ),
         ),
       ),
@@ -120,14 +167,12 @@ class ContactScreen extends StatelessWidget {
 class ContactInfoTile extends StatelessWidget {
   final FaIconData icon;
   final String text;
-  final String url;
   final VoidCallback onTap;
 
   const ContactInfoTile({
     super.key,
     required this.icon,
     required this.text,
-    required this.url,
     required this.onTap,
   });
 

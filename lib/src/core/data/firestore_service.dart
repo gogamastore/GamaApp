@@ -241,24 +241,20 @@ class FirestoreService {
     }).asyncMap((products) => Future.wait(products.map(_transformProduct)));
   }
 
+  /// Produk trending OTOMATIS: paling banyak terjual (`soldCount`) lebih dulu.
+  /// Tidak lagi membaca koleksi manual `trending_products`.
   Stream<List<Product>> getTrendingProductsStream() {
-    return _db.collection('trending_products').snapshots().switchMap((snapshot) {
-      final productIds = snapshot.docs.map((doc) => doc['productId'] as String).toList();
-
-      if (productIds.isEmpty) {
-        return Stream.value([]);
-      }
-
-      final productStreams = productIds.map((id) {
-        return _db.collection('products').doc(id).snapshots().asyncMap((doc) async {
-          if (!doc.exists) return null;
-          final product = Product.fromFirestore(doc);
-          return await _transformProduct(product);
-        });
-      });
-
-      return CombineLatestStream.list(productStreams)
-          .map((products) => products.where((p) => p != null).cast<Product>().toList());
+    return _db
+        .collection('products')
+        .orderBy('soldCount', descending: true)
+        .limit(30)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      final products = snapshot.docs
+          .map((doc) => Product.fromFirestore(doc))
+          .where((p) => p.soldCount > 0)
+          .toList();
+      return Future.wait(products.map(_transformProduct));
     });
   }
 

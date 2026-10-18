@@ -284,6 +284,7 @@ class ProductCardStyle {
   final bool showDiscountBadge;
   final bool showCartButton;
   final bool showRating; // tampilkan rata-rata bintang + jumlah ulasan
+  final bool showSold; // tampilkan jumlah terjual
   final Color? cardColor;
   final bool shadowEnabled;
   final double shadowBlur;
@@ -305,6 +306,7 @@ class ProductCardStyle {
     required this.showDiscountBadge,
     required this.showCartButton,
     this.showRating = false,
+    this.showSold = false,
     required this.cardColor,
     required this.shadowEnabled,
     required this.shadowBlur,
@@ -328,6 +330,7 @@ class ProductCardStyle {
     showDiscountBadge: true,
     showCartButton: false,
     showRating: false,
+    showSold: false,
     cardColor: null,
     shadowEnabled: true,
     shadowBlur: 8,
@@ -352,6 +355,7 @@ class ProductCardStyle {
       showDiscountBadge: c.boolean('showDiscountBadge', true),
       showCartButton: c.boolean('showCartButton', false),
       showRating: c.boolean('showRating', false),
+      showSold: c.boolean('showSold', false),
       cardColor: c.color('cardColor'),
       shadowEnabled: c.boolean('shadowEnabled', true),
       shadowBlur: c.number('shadowBlur', 8).clamp(0, 40).toDouble(),

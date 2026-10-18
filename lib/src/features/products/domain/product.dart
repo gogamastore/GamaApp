@@ -13,6 +13,7 @@ class Product {
   final String brandId; // id dokumen `brands` (kosong = tanpa brand)
   final int ratingSum; // total bintang dari semua ulasan
   final int ratingCount; // jumlah ulasan
+  final int soldCount; // total unit terjual (untuk trending + "X terjual")
   final Timestamp? purchaseAt; // waktu terakhir dibeli/restock (untuk urutan katalog)
 
   Product({
@@ -28,6 +29,7 @@ class Product {
     this.brandId = '',
     this.ratingSum = 0,
     this.ratingCount = 0,
+    this.soldCount = 0,
     this.purchaseAt,
   });
 
@@ -48,6 +50,7 @@ class Product {
     String? brandId,
     int? ratingSum,
     int? ratingCount,
+    int? soldCount,
     Timestamp? purchaseAt,
   }) {
     return Product(
@@ -63,6 +66,7 @@ class Product {
       brandId: brandId ?? this.brandId,
       ratingSum: ratingSum ?? this.ratingSum,
       ratingCount: ratingCount ?? this.ratingCount,
+      soldCount: soldCount ?? this.soldCount,
       purchaseAt: purchaseAt ?? this.purchaseAt,
     );
   }
@@ -113,6 +117,7 @@ class Product {
       brandId: map['brandId'] as String? ?? '',
       ratingSum: (map['ratingSum'] as num? ?? 0).toInt(),
       ratingCount: (map['ratingCount'] as num? ?? 0).toInt(),
+      soldCount: (map['soldCount'] as num? ?? 0).toInt(),
       purchaseAt: map['purchaseAt'] as Timestamp?,
     );
   }

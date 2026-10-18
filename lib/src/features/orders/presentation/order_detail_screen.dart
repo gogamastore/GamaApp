@@ -23,6 +23,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   bool _isLoadingTracking = false;
   BiteshipTrackingInfo? _trackingInfo;
   String? _trackingError;
+  bool _showHistory = false; // dropdown riwayat pengiriman
 
   final _biteshipService = BiteshipService();
   final _currency =
@@ -33,6 +34,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     super.initState();
     _order = widget.order;
     _listenOrderUpdates();
+    // Muat riwayat pengiriman OTOMATIS (tak perlu klik "Lacak Pengiriman").
+    if (_order.hasBiteshipDelivery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _trackDelivery());
+    }
   }
 
   void _listenOrderUpdates() {
@@ -170,6 +175,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   // ── Status info ───────────────────────────────────────────────
   Map<String, dynamic> _statusInfo(String status) {
     final s = status.toLowerCase();
+    // Pengembalian (retur) dari kurir — tampilkan terpisah dari "Dibatalkan".
+    if ((_order.biteshipStatus ?? '').toLowerCase().contains('return')) {
+      return {
+        'title': 'Pesanan Dikembalikan',
+        'icon': Icons.assignment_return,
+        'color': Colors.amber[800]!,
+      };
+    }
     if (s == 'pending') {
       return {
         'title': 'Menunggu Diproses',
@@ -316,48 +329,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       buttons.add(const SizedBox(height: 12));
     }
 
-    // 2. Lacak — jika pakai Biteship
-    if (_order.hasBiteshipDelivery) {
-      buttons.add(Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: _isLoadingTracking
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.location_searching),
-              label:
-                  Text(_isLoadingTracking ? 'Memuat...' : 'Lacak Pengiriman'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: _isLoadingTracking ? null : _trackDelivery,
-            ),
-          ),
-          if (_order.deliveryTrackingUrl != null ||
-              _trackingInfo?.trackingUrl != null) ...[
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.open_in_browser, size: 16),
-              label: const Text('Buka'),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: _openTrackingUrl,
-            ),
-          ],
-        ],
-      ));
-      buttons.add(const SizedBox(height: 12));
-    }
+    // (Lacak pengiriman kini tampil otomatis sebagai kartu riwayat di bawah —
+    //  lihat _buildTrackingSection; tak perlu tombol manual.)
 
     // 3. Konfirmasi terima — jika status shipped
     if (_order.status.toLowerCase() == 'shipped') {
@@ -566,9 +539,35 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    if (_trackingInfo == null) return const SizedBox.shrink();
+    // Masih memuat & belum ada data → tampilkan indikator (auto-load).
+    if (_trackingInfo == null) {
+      if (_isLoadingTracking) {
+        return Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: const Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 10),
+              Text('Memuat status pengiriman…', style: TextStyle(fontSize: 13)),
+            ]),
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
     final info = _trackingInfo!;
     if (!info.hasDelivery) return const SizedBox.shrink();
+
+    // Biteship mengirim riwayat terlama→terbaru. Urutkan DESC (terbaru dulu)
+    // agar status TERAKHIR tampil di atas, bukan status awal.
+    final sortedHistory = [...info.history]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(a.timestamp);
+        final tb = DateTime.tryParse(b.timestamp);
+        if (ta == null || tb == null) return 0;
+        return tb.compareTo(ta);
+      });
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -579,9 +578,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.location_on, size: 18),
+                const Icon(Icons.local_shipping_outlined, size: 18),
                 const SizedBox(width: 6),
-                const Text('Lacak Paket',
+                const Text('Lacak Pengiriman',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const Spacer(),
@@ -601,6 +600,26 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           fontSize: 10),
                     ),
                   ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.only(left: 6),
+                  constraints: const BoxConstraints(),
+                  icon: _isLoadingTracking
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh, size: 18),
+                  tooltip: 'Muat ulang',
+                  onPressed: _isLoadingTracking ? null : _trackDelivery,
+                ),
+                if ((_order.deliveryTrackingUrl?.isNotEmpty ?? false) ||
+                    (info.trackingUrl?.isNotEmpty ?? false))
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.only(left: 2),
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    tooltip: 'Lacak langsung (peta)',
+                    onPressed: _openTrackingUrl,
+                  ),
               ],
             ),
             if (info.courierName != null) ...[
@@ -613,12 +632,74 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               Text('Driver: ${info.driverName} (${info.driverPhone ?? '-'})',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600])),
             ],
-            if (info.history.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Divider(height: 1),
+            // Foto bukti pengiriman (POD) — bila kurir menyediakannya.
+            if ((info.proofImageUrl ?? '').isNotEmpty) ...[
               const SizedBox(height: 10),
-              ...info.history.take(5).map((h) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+              const Text('Foto Bukti Pengiriman',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () async {
+                  final uri = Uri.parse(info.proofImageUrl!);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    info.proofImageUrl!,
+                    width: 140,
+                    height: 140,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => Container(
+                      width: 140,
+                      height: 140,
+                      color: Colors.grey[200],
+                      child: const Icon(Icons.broken_image, color: Colors.grey),
+                    ),
+                  ),
+                ),
+              ),
+              if ((info.proofReceiverName ?? '').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('Diterima oleh: ${info.proofReceiverName}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                ),
+            ],
+
+            // Riwayat pengiriman — dropdown (SELURUH riwayat, terbaru dulu).
+            if (sortedHistory.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              InkWell(
+                onTap: () => setState(() => _showHistory = !_showHistory),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Text('Riwayat Pengiriman (${sortedHistory.length})',
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      Icon(_showHistory ? Icons.expand_less : Icons.expand_more,
+                          size: 20, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+              if (!_showHistory)
+                Text(
+                  '${biteshipStatusLabel(sortedHistory.first.status)} · ${_formatTrackTime(sortedHistory.first.timestamp)}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+              if (_showHistory)
+                ...sortedHistory.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final h = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -626,8 +707,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           width: 8,
                           height: 8,
                           margin: const EdgeInsets.only(top: 4),
-                          decoration: const BoxDecoration(
-                            color: Colors.blue,
+                          decoration: BoxDecoration(
+                            color: i == 0 ? Colors.blue : Colors.grey[400],
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -656,7 +737,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       ],
                     ),
-                  )),
+                  );
+                }),
             ],
           ],
         ),

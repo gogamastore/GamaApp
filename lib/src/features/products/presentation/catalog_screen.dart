@@ -239,41 +239,50 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
       case ProductLayout.grid:
       default:
+        // Grid dibangun sebagai baris-baris IntrinsicHeight (bukan
+        // childAspectRatio tetap) agar tinggi kartu MENYESUAIKAN seluruh isi
+        // (gambar + semua info yang diaktifkan di App Builder), sama seperti
+        // grid di beranda. Tetap lazy via ListView.builder (per baris).
         final cols = catalog.gridColumns.clamp(1, 4);
         return LayoutBuilder(
           builder: (context, cons) {
             final itemWidth =
                 (cons.maxWidth - 16 - spacing * (cols - 1)) / cols;
-            return GridView.builder(
+            final rowCount = (products.length / cols).ceil();
+            return ListView.builder(
               padding: const EdgeInsets.all(8),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: cols,
-                crossAxisSpacing: spacing,
-                mainAxisSpacing: spacing,
-                childAspectRatio: _gridAspect(style, itemWidth),
-              ),
-              itemCount: products.length,
-              itemBuilder: (context, i) => ConfigurableProductCard(
-                product: products[i],
-                style: style,
-                fillHeight: true,
-                compact: itemWidth < 120,
-              ),
+              itemCount: rowCount,
+              itemBuilder: (context, rowIndex) {
+                final start = rowIndex * cols;
+                return Padding(
+                  padding: EdgeInsets.only(
+                      bottom: rowIndex < rowCount - 1 ? spacing : 0),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var k = 0; k < cols; k++) ...[
+                          if (k > 0) SizedBox(width: spacing),
+                          Expanded(
+                            child: start + k < products.length
+                                ? ConfigurableProductCard(
+                                    product: products[start + k],
+                                    style: style,
+                                    fillHeight: true,
+                                    compact: itemWidth < 120,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
     }
-  }
-
-  /// Rasio lebar:tinggi tiap sel grid agar gambar + info muat tanpa overflow.
-  double _gridAspect(ProductCardStyle s, double width) {
-    var info = 24.0; // padding kartu
-    if (s.showCategory) info += 15;
-    if (s.showTitle) info += 17.0 * s.titleMaxLines;
-    if (s.showStock) info += 16;
-    if (s.showPrice || s.showCartButton) info += 42;
-    final h = width / (s.imageRatio <= 0 ? 1 : s.imageRatio) + info;
-    return width / h;
   }
 
   /// Membungkus [CatalogConfig] menjadi [ProductBlockConfig] agar bisa memakai

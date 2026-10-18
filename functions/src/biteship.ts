@@ -178,17 +178,48 @@ export const getBiteshipRates = onCall(
       throw new HttpsError("invalid-argument", "destinationAreaId dan items wajib diisi.");
     }
 
-    // Kurir reguler + instan sekaligus
-    // Kurir instan hanya akan muncul jika koordinat destination tersedia
+    // Konfigurasi kurir aktif yang diatur admin (settings/shipping_couriers).
+    // Key = `<courierCode>:<serviceCode>`, nilai false = nonaktif. Difilter di
+    // server agar hasil tidak tergantung timing pemuatan di klien.
+    let serviceConfig: Record<string, boolean> | null = null;
+    try {
+      const cfgSnap = await db.doc("settings/shipping_couriers").get();
+      const raw = cfgSnap.exists ? (cfgSnap.data()?.services as Record<string, boolean> | undefined) : undefined;
+      if (raw && typeof raw === "object" && Object.keys(raw).length) serviceConfig = raw;
+    } catch (e: any) {
+      logger.warn("Gagal membaca settings/shipping_couriers:", e?.message);
+    }
+
+    // Kurir reguler + instan sekaligus (fallback bila admin belum mengatur).
+    const fallbackCouriers = [
+      // Reguler
+      "jne", "jnt", "sicepat", "anteraja", "pos", "tiki", "ninja",
+      "lion", "wahana", "idexpress", "sentralcargo",
+      // Instan (muncul jika koordinat tersedia)
+      "gojek", "grab", "paxel", "lalamove", "borzo",
+    ];
+
+    // Kurir yang diminta ke Biteship: eksplisit dari client > kurir aktif di
+    // konfigurasi admin > fallback.
+    const enabledCourierCodes = serviceConfig
+      ? Array.from(
+          new Set(
+            Object.entries(serviceConfig)
+              .filter(([, v]) => v !== false)
+              .map(([k]) => k.split(":")[0]),
+          ),
+        )
+      : null;
+
+    // Semua layanan dinonaktifkan admin → tidak ada tarif.
+    if (serviceConfig && (!enabledCourierCodes || enabledCourierCodes.length === 0)) {
+      logger.info("getBiteshipRates: semua kurir dinonaktifkan admin.");
+      return { rates: [] };
+    }
+
     const defaultCouriers = couriers?.length
       ? couriers
-      : [
-          // Reguler
-          "jne", "jnt", "sicepat", "anteraja", "pos", "tiki", "ninja",
-          "lion", "wahana", "idexpress", "sentralcargo",
-          // Instan (muncul jika koordinat tersedia)
-          "gojek", "grab", "paxel", "lalamove", "borzo",
-        ];
+      : enabledCourierCodes ?? fallbackCouriers;
 
     // Koordinat origin toko
     const originLat = parseFloat(BITESHIP_ORIGIN_LATITUDE.value() || "0");
@@ -287,12 +318,52 @@ export const getBiteshipRates = onCall(
           return a.price - b.price;
         });
 
-      logger.info(`Biteship rates: ${rates.length} layanan (koordinat: ${hasOriginCoords && hasDestCoords})`);
-      return { rates };
+      // Saring ke layanan yang DIAKTIFKAN admin (per courier_service_code).
+      // Kunci = `<courier_code>:<courier_service_code>` (sama dgn /v1/couriers).
+      const visibleRates = serviceConfig
+        ? rates.filter((r) => serviceConfig![`${r.courierId}:${r.courierServiceCode}`] !== false)
+        : rates;
+
+      logger.info(
+        `Biteship rates: ${visibleRates.length}/${rates.length} layanan ` +
+        `(filter admin: ${!!serviceConfig}, koordinat: ${hasOriginCoords && hasDestCoords})`,
+      );
+      return { rates: visibleRates };
     } catch (err: any) {
       const errData = err?.response?.data;
       logger.error("getBiteshipRates error:", errData ?? err.message);
       throw new HttpsError("internal", errData?.error ?? "Gagal mengambil tarif kurir.");
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────
+// FUNCTION 2b: Daftar kurir yang AKTIF di akun Biteship (GET /v1/couriers)
+// Hanya kurir/layanan yang diaktifkan admin di dashboard Biteship yang
+// dikembalikan. Dipakai halaman Pengaturan Pengiriman untuk toggle layanan.
+// ─────────────────────────────────────────────────────────────────
+export const getBiteshipCouriers = onCall(
+  { region: "asia-southeast1", secrets: [BITESHIP_API_KEY] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Login diperlukan.");
+    try {
+      const api = biteshipApi();
+      const resp = await api.get("/v1/couriers");
+      const couriers = (resp.data.couriers ?? []).map((c: any) => ({
+        courierCode: c.courier_code ?? "",
+        courierName: c.courier_name ?? "",
+        serviceCode: c.courier_service_code ?? "",
+        serviceName: c.courier_service_name ?? "",
+        serviceType: c.service_type ?? "",
+        shippingType: c.shipping_type ?? "",
+        description: c.description ?? "",
+      }));
+      logger.info(`getBiteshipCouriers: ${couriers.length} layanan aktif di akun Biteship.`);
+      return { couriers };
+    } catch (err: any) {
+      const errData = err?.response?.data;
+      logger.error("getBiteshipCouriers error:", errData ?? err.message);
+      throw new HttpsError("internal", errData?.error ?? "Gagal mengambil daftar kurir Biteship.");
     }
   }
 );
@@ -537,14 +608,48 @@ export const trackBiteshipOrder = onCall(
 
       // Ambil history tracking menggunakan waybillId terbaru
       let trackingHistory: any[] = [];
+      let trackData: any = {};
       if (freshWaybillId) {
         try {
           const trackResp = await api.get(`/v1/trackings/${freshWaybillId}`);
-          trackingHistory = trackResp.data.history ?? [];
+          trackData = trackResp.data ?? {};
+          trackingHistory = trackData.history ?? [];
         } catch {
           // history belum tersedia, lanjutkan
         }
       }
+
+      // ── Bukti pengiriman (Proof of Delivery) — best effort ──
+      // Nama field POD berbeda per kurir; cari di beberapa kemungkinan lokasi.
+      const pickPhoto = (o: any): string => {
+        if (!o || typeof o !== "object") return "";
+        const direct = o.photo ?? o.image ?? o.image_url ?? o.url ?? o.proof_url ?? o.link;
+        if (typeof direct === "string" && /^https?:\/\//i.test(direct)) return direct;
+        const arr = o.photos ?? o.images;
+        if (Array.isArray(arr) && arr.length) {
+          const first = arr[0];
+          const u = typeof first === "string" ? first : (first?.url ?? first?.photo ?? "");
+          if (typeof u === "string" && /^https?:\/\//i.test(u)) return u;
+        }
+        return "";
+      };
+      const podCandidates = [
+        biteshipData.proof_of_delivery,
+        biteshipData.courier?.proof_of_delivery,
+        biteshipData.delivery?.proof_of_delivery,
+        trackData.proof_of_delivery,
+        trackData.courier?.proof_of_delivery,
+      ];
+      const pod = podCandidates.find((x: any) => x && typeof x === "object") ?? null;
+      let proofImageUrl = pickPhoto(pod);
+      if (!proofImageUrl) {
+        for (const h of trackingHistory) {
+          const p = pickPhoto(h?.proof_of_delivery ?? h);
+          if (p) { proofImageUrl = p; break; }
+        }
+      }
+      const proofReceiverName =
+        pod?.receiver_name ?? pod?.received_by ?? pod?.recipient ?? pod?.name ?? "";
 
       // Sync ke Firestore — perbaiki semua field yang salah/kosong
       const newStatus = mapBiteshipStatus(biteshipData.status);
@@ -577,6 +682,8 @@ export const trackBiteshipOrder = onCall(
         driverPhone: biteshipData.courier?.driver_phone ?? "",
         courierTrackingId: freshTrackingId,
         trackingUrl: freshTrackingUrl,
+        proofImageUrl,
+        proofReceiverName,
         history: trackingHistory.map((h: any) => ({
           timestamp: h.updated_at,
           status: h.status,

@@ -190,6 +190,8 @@ class BiteshipTrackingInfo {
   final String? driverName;
   final String? driverPhone;
   final String? trackingUrl;
+  final String? proofImageUrl; // foto bukti pengiriman (POD) dari kurir
+  final String? proofReceiverName; // nama penerima paket
   final List<TrackingHistory> history;
 
   const BiteshipTrackingInfo({
@@ -201,6 +203,8 @@ class BiteshipTrackingInfo {
     this.driverName,
     this.driverPhone,
     this.trackingUrl,
+    this.proofImageUrl,
+    this.proofReceiverName,
     this.history = const [],
   });
 
@@ -215,6 +219,8 @@ class BiteshipTrackingInfo {
       driverName: map['driverName']?.toString(),
       driverPhone: map['driverPhone']?.toString(),
       trackingUrl: map['trackingUrl']?.toString(),
+      proofImageUrl: map['proofImageUrl']?.toString(),
+      proofReceiverName: map['proofReceiverName']?.toString(),
       history: historyRaw
           .map((h) => TrackingHistory.fromMap(_toStringDynamic(h)))
           .toList(),

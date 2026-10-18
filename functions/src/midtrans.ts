@@ -1,7 +1,7 @@
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp, DocumentReference } from "firebase-admin/firestore";
 import { logger } from "firebase-functions/v2";
 import { defineSecret } from "firebase-functions/params";
 
@@ -20,6 +20,12 @@ const MIDTRANS_IS_PRODUCTION = defineSecret("MIDTRANS_IS_PRODUCTION");
 const midtransClient = require("midtrans-client");
 
 const db = getFirestore();
+
+// ─── Transaksi kasir POS (orders.source == 'pos') ─────────────────
+// Dibuat oleh staf (bukan pembeli), jadi otorisasinya berdasarkan role di
+// koleksi `user`. Pembeli menunggu di kasir → batas bayar dibuat singkat.
+const POS_STAFF_ROLES = ["admin", "kasir"];
+const POS_EXPIRY_MINUTES = 30;
 
 // ─────────────────────────────────────────────────────────────────
 // FUNCTION 1: Buat transaksi Midtrans Snap
@@ -42,16 +48,24 @@ export const createMidtransTransaction = onCall(
     }
 
     const order = orderDoc.data()!;
+    const isPosOrder = order.source === "pos";
 
-    if (order.customerId !== request.auth.uid) {
+    const userDoc = await db.collection("user").doc(request.auth.uid).get();
+    const user = userDoc.data() ?? {};
+
+    if (isPosOrder) {
+      if (!POS_STAFF_ROLES.includes(user.role)) {
+        throw new HttpsError("permission-denied", "Hanya kasir/admin yang dapat memproses transaksi POS.");
+      }
+      if (order.status !== "pending") {
+        throw new HttpsError("failed-precondition", "Transaksi POS ini tidak sedang menunggu pembayaran.");
+      }
+    } else if (order.customerId !== request.auth.uid) {
       throw new HttpsError("permission-denied", "Akses ditolak.");
     }
     if (order.paymentStatus === "paid") {
       throw new HttpsError("already-exists", "Order ini sudah dibayar.");
     }
-
-    const userDoc = await db.collection("user").doc(request.auth.uid).get();
-    const user = userDoc.data() ?? {};
 
     const snap = new midtransClient.Snap({
       isProduction: MIDTRANS_IS_PRODUCTION.value() === "true",
@@ -103,40 +117,70 @@ export const createMidtransTransaction = onCall(
       });
     }
 
-    const parameter = {
+    const grossAmount = Math.round(order.total);
+
+    // Harga kasir POS bisa pecahan; pembulatan per item dapat membuat jumlah
+    // item_details ≠ gross_amount (ditolak Midtrans) → tambah baris selisih.
+    if (isPosOrder) {
+      const itemsTotal = itemDetails.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      if (itemsTotal !== grossAmount) {
+        itemDetails.push({
+          id: "ROUNDING",
+          price: grossAmount - itemsTotal,
+          quantity: 1,
+          name: "Pembulatan",
+        });
+      }
+    }
+
+    const parameter: Record<string, any> = {
       transaction_details: {
         order_id: orderId,
-        gross_amount: Math.round(order.total),
+        gross_amount: grossAmount,
       },
       item_details: itemDetails,
-      customer_details: {
-        first_name: order.customerDetails?.name ?? user.name ?? "Pelanggan",
-        email: user.email ?? "",
-        phone: order.customerDetails?.whatsapp ?? user.whatsapp ?? "",
-        billing_address: { address: order.customerDetails?.address ?? "" },
-        shipping_address: { address: order.customerDetails?.address ?? "" },
-      },
+      customer_details: isPosOrder
+        ? {
+            // Pemanggil POS adalah kasir — datanya (email dll.) bukan data pembeli.
+            first_name: order.customerDetails?.name || "Pelanggan Toko",
+            ...(order.customerDetails?.whatsapp
+              ? { phone: order.customerDetails.whatsapp }
+              : {}),
+          }
+        : {
+            first_name: order.customerDetails?.name ?? user.name ?? "Pelanggan",
+            email: user.email ?? "",
+            phone: order.customerDetails?.whatsapp ?? user.whatsapp ?? "",
+            billing_address: { address: order.customerDetails?.address ?? "" },
+            shipping_address: { address: order.customerDetails?.address ?? "" },
+          },
       enabled_payments: [
         "gopay", "shopeepay", "other_qris",
         "bca_va", "bni_va", "bri_va", "mandiri_bill", "permata_va", "other_va",
         "indomaret", "alfamart", "credit_card",
       ],
-      callbacks: {
-        finish: `gogama://payment-result?order_id=${orderId}`,
-      },
-      expiry: { unit: "hours", duration: 24 },
+      expiry: isPosOrder
+        ? { unit: "minutes", duration: POS_EXPIRY_MINUTES }
+        : { unit: "hours", duration: 24 },
     };
+    // Deep link aplikasi pembeli. Kasir POS memantau status lewat Firestore.
+    if (!isPosOrder) {
+      parameter.callbacks = {
+        finish: `gogama://payment-result?order_id=${orderId}`,
+      };
+    }
 
     try {
       const transaction = await snap.createTransaction(parameter);
+      const expiryMinutes = isPosOrder ? POS_EXPIRY_MINUTES : 24 * 60;
 
       await db.collection("orders").doc(orderId).update({
         midtransToken: transaction.token,
         midtransRedirectUrl: transaction.redirect_url,
         paymentStatus: "pending_payment",
-        // Simpan batas waktu expire (24 jam dari sekarang) untuk sweeper
+        // Simpan batas waktu expire untuk sweeper (24 jam; POS 30 menit)
         midtransExpiryTime: Timestamp.fromDate(
-          new Date(Date.now() + 24 * 60 * 60 * 1000)
+          new Date(Date.now() + expiryMinutes * 60 * 1000)
         ),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -159,6 +203,7 @@ export const createMidtransTransaction = onCall(
 //   capture / settlement → paymentStatus = 'paid',   status = 'Processing'
 //   cancel / deny / expire → paymentStatus = 'failed', status = 'Cancelled'
 //   pending → paymentStatus = 'pending_payment'
+// Order kasir POS (source 'pos') ditangani terpisah → applyPosNotification.
 // ─────────────────────────────────────────────────────────────────
 export const handleMidtransNotification = onRequest(
   { region: "asia-southeast1", secrets: [MIDTRANS_SERVER_KEY, MIDTRANS_IS_PRODUCTION] },
@@ -181,6 +226,21 @@ export const handleMidtransNotification = onRequest(
       const fraudStatus: string = statusResponse.fraud_status;
 
       logger.info(`Midtrans notif | Order: ${orderId} | Status: ${transactionStatus}`);
+
+      const orderRef = db.collection("orders").doc(orderId);
+      const orderSnap = await orderRef.get();
+      if (!orderSnap.exists) {
+        // Mis. tes notifikasi dari dashboard Midtrans. Balas 200 agar
+        // Midtrans tidak terus mengirim ulang.
+        logger.warn(`Midtrans notif untuk order yang tidak ada: ${orderId}`);
+        res.status(200).json({ message: "Order not found, ignored" });
+        return;
+      }
+      if (orderSnap.get("source") === "pos") {
+        await applyPosNotification(orderRef, transactionStatus, fraudStatus, statusResponse.payment_type);
+        res.status(200).json({ message: "OK" });
+        return;
+      }
 
       let paymentStatus = "unpaid";
       let orderStatus: string | null = null;
@@ -219,6 +279,74 @@ export const handleMidtransNotification = onRequest(
     }
   }
 );
+
+// ─────────────────────────────────────────────────────────────────
+// Notifikasi untuk transaksi kasir POS (orders.source == 'pos').
+// Order POS dibuat dengan status 'pending' TANPA mengurangi stok, lalu:
+//   capture / settlement → paymentStatus = 'paid',   status = 'success'
+//                          + kurangi stok (sekali saja, via stockUpdated)
+//   cancel / deny / expire → paymentStatus = 'failed', status = 'cancelled'
+//   pending → paymentStatus = 'pending_payment'
+// Midtrans bisa mengirim notifikasi berulang / tidak berurutan, jadi selain
+// "lunas", notifikasi hanya berlaku selama order masih 'pending'.
+// ─────────────────────────────────────────────────────────────────
+async function applyPosNotification(
+  orderRef: DocumentReference,
+  transactionStatus: string,
+  fraudStatus: string,
+  paymentType: string | undefined,
+): Promise<void> {
+  await db.runTransaction(async (tx) => {
+    const order = (await tx.get(orderRef)).data()!;
+    const update: Record<string, any> = {
+      midtransTransactionStatus: transactionStatus,
+      midtransPaymentType: paymentType ?? null,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    const isPaid = transactionStatus === "settlement" ||
+      (transactionStatus === "capture" && fraudStatus === "accept");
+
+    if (isPaid) {
+      if (order.status === "cancelled") {
+        // Uang sudah diterima walau kasir membatalkan → catat sebagai penjualan.
+        logger.warn(`Order POS ${orderRef.id} dibayar setelah dibatalkan kasir.`);
+      }
+      update.paymentStatus = "paid";
+      update.status = "success";
+      if (!order.validatedAt) update.validatedAt = FieldValue.serverTimestamp();
+
+      if (!order.stockUpdated) {
+        // Produk sementara kasir (id 'temp_') tidak punya stok.
+        const items = ((order.products ?? []) as any[]).filter(
+          (p) => p.productId && !String(p.productId).startsWith("temp_")
+        );
+        const refs = items.map((p) => db.collection("products").doc(p.productId));
+        const productSnaps = refs.length ? await tx.getAll(...refs) : [];
+        productSnaps.forEach((snap, i) => {
+          if (snap.exists) {
+            tx.update(snap.ref, { stock: FieldValue.increment(-Number(items[i].quantity)) });
+          } else {
+            logger.warn(`Produk ${snap.id} tidak ditemukan; stok dilewati (order ${orderRef.id}).`);
+          }
+        });
+        update.stockUpdated = true;
+      }
+    } else if (order.status !== "pending") {
+      return; // Sudah lunas / dibatalkan — abaikan notifikasi susulan.
+    } else if (transactionStatus === "capture") {
+      update.paymentStatus = "fraud"; // challenge: tinjau di dashboard Midtrans
+    } else if (["cancel", "deny", "expire"].includes(transactionStatus)) {
+      update.paymentStatus = "failed";
+      update.status = "cancelled";
+    } else if (transactionStatus === "pending") {
+      update.paymentStatus = "pending_payment";
+    }
+
+    tx.update(orderRef, update);
+  });
+  logger.info(`Order POS ${orderRef.id} diproses untuk status Midtrans: ${transactionStatus}`);
+}
 
 // ─────────────────────────────────────────────────────────────────
 // FUNCTION 3: Scheduled sweeper — expire order yang melewati 24 jam
@@ -278,7 +406,8 @@ export const checkExpiredOrders = onSchedule(
           logger.info(`Expiring order: ${doc.id}`);
           batch.update(doc.ref, {
             paymentStatus: "failed",
-            status: "Cancelled",
+            // POS menulis status huruf kecil ('success'/'cancelled').
+            status: doc.get("source") === "pos" ? "cancelled" : "Cancelled",
             midtransTransactionStatus: "expire",
             expiredAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),

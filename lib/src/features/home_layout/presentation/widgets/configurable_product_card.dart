@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/utils/format_sold.dart';
 import '../../../cart/application/cart_provider.dart';
 import '../../../products/application/promotion_provider.dart';
 import '../../../products/domain/product.dart';
@@ -235,6 +236,12 @@ class _ProductInfo extends StatelessWidget {
                   fontSize: smallSize, color: Colors.grey[700], fontWeight: FontWeight.w600),
             ),
           ],
+        ),
+      if (style.showSold && product.soldCount > 0)
+        Text(
+          '${formatSold(product.soldCount)} terjual',
+          textAlign: align,
+          style: TextStyle(fontSize: smallSize, color: Colors.grey[600]),
         ),
       if (style.showStock)
         Text(
