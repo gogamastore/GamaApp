@@ -23,8 +23,11 @@ class _Pricing {
   final double price;
   final double original;
   final int percent;
+  // Batas 1 pcs per pesanan (online) bila promo mengaktifkannya.
+  final int? maxQtyPerBuyer;
 
-  const _Pricing(this.hasPromo, this.price, this.original, this.percent);
+  const _Pricing(this.hasPromo, this.price, this.original, this.percent,
+      {this.maxQtyPerBuyer});
 
   factory _Pricing.of(BuildContext context, Product product) {
     final promo =
@@ -35,7 +38,8 @@ class _Pricing {
         promo.discountPrice < product.price;
     if (!hasPromo) return _Pricing(false, product.price, product.price, 0);
     final percent = ((1 - promo.discountPrice / product.price) * 100).round();
-    return _Pricing(true, promo.discountPrice, product.price, percent);
+    return _Pricing(true, promo.discountPrice, product.price, percent,
+        maxQtyPerBuyer: promo.maxQtyPerBuyer);
   }
 }
 
@@ -138,12 +142,20 @@ class _CartButton extends StatelessWidget {
       product,
       1,
       discountPrice: pricing.hasPromo ? pricing.price : null,
+      // Batas 1 pcs per pesanan bila promo mengaktifkannya (maxQtyPerBuyer==1).
+      maxQtyPerBuyer: pricing.maxQtyPerBuyer,
     );
     final message = switch (result) {
       AddToCartResult.success => '${product.name} ditambahkan ke keranjang',
       AddToCartResult.cartFull => 'Keranjang penuh (maksimal 160 produk).',
       AddToCartResult.insufficientStock => 'Stok tidak mencukupi.',
       AddToCartResult.notLoggedIn => 'Silakan login terlebih dahulu.',
+      AddToCartResult.limitedPromo =>
+        'Produk promo ini maksimal 1 pcs per pesanan.',
+      AddToCartResult.flashLimited =>
+        'Produk flash sale ini melebihi batas maksimal pembelian.',
+      AddToCartResult.flashOneItem =>
+        'Flash sale ini hanya boleh 1 produk. Hapus dulu produk flash sale lain di keranjang.',
     };
     messenger
       ..hideCurrentSnackBar()
@@ -169,7 +181,7 @@ class _CartButton extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: () => _add(context),
-          child: Icon(Icons.add_shopping_cart, size: size * 0.55, color: Colors.white),
+          child: Icon(Icons.shopping_cart, size: size * 0.55, color: Colors.white),
         ),
       ),
     );

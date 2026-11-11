@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../features/authentication/data/auth_service.dart';
 import '../../features/cart/application/cart_provider.dart';
 import '../../features/chat/data/chat_service.dart';
+import '../utils/admin_contact.dart';
+import 'contact_admin_sheet.dart';
 import '../../features/home_layout/application/app_layout_provider.dart';
 import '../../features/notifications/data/order_notification_service.dart';
 import 'promo_popup.dart';
@@ -185,14 +187,23 @@ class _CartIconButton extends StatelessWidget {
 class _ChatIconButton extends StatelessWidget {
   const _ChatIconButton();
 
+  // Bottom sheet [Obrolan | daftar WhatsApp] — sama seperti tombol Hubungi lain.
+  void _showContactSheet(BuildContext context) {
+    showAdminContactSheet(
+      context,
+      onChat: () => context.push('/chat'),
+      buildWhatsappMessage: generalWhatsappMessage,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = context.watch<AuthService>().currentUser?.uid;
 
     final iconButton = IconButton(
       icon: const Icon(CupertinoIcons.chat_bubble_2),
-      tooltip: 'Chat dengan Admin',
-      onPressed: () => context.push('/chat'),
+      tooltip: 'Hubungi Admin',
+      onPressed: () => _showContactSheet(context),
     );
 
     if (uid == null) return iconButton;

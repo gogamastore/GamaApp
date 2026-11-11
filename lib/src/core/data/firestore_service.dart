@@ -14,6 +14,7 @@ import '../../features/products/domain/brand.dart';
 import '../../features/checkout/domain/bank_account.dart';
 import '../../features/profile/domain/address.dart';
 import '../../features/products/domain/promotion.dart';
+import '../../features/flash_sale/domain/flash_sale.dart';
 import '../../features/reviews/domain/review.dart';
 
 class FirestoreService {
@@ -340,7 +341,65 @@ class FirestoreService {
     }
     return null;
   }
-  
+
+  // ── Flash Sale (koleksi `flash_sales`) ───────────────────────────────
+  /// Semua event flash sale (realtime). Jumlahnya kecil (dikurasi admin),
+  /// pemilihan event aktif/teaser dilakukan di sisi klien.
+  Stream<List<FlashSale>> getFlashSalesStream() {
+    return _db.collection('flash_sales').snapshots().map(
+        (snapshot) => snapshot.docs.map(FlashSale.fromFirestore).toList());
+  }
+
+  /// Detail produk berdasarkan daftar id (realtime), mempertahankan urutan id.
+  Stream<List<Product>> getProductsByIdsStream(List<String> ids) {
+    final unique = <String>[];
+    for (final id in ids) {
+      if (id.isNotEmpty && !unique.contains(id)) unique.add(id);
+    }
+    if (unique.isEmpty) return Stream.value(const []);
+
+    final chunks = <List<String>>[];
+    for (var i = 0; i < unique.length; i += 30) {
+      final end = (i + 30 < unique.length) ? i + 30 : unique.length;
+      chunks.add(unique.sublist(i, end));
+    }
+    final streams = chunks.map((chunk) => _db
+        .collection('products')
+        .where(FieldPath.documentId, whereIn: chunk)
+        .snapshots());
+
+    return CombineLatestStream.list(streams).asyncMap((snaps) async {
+      final map = <String, Product>{};
+      for (final snap in snaps) {
+        for (final doc in snap.docs) {
+          map[doc.id] = await _transformProduct(Product.fromFirestore(doc));
+        }
+      }
+      return unique
+          .map((id) => map[id])
+          .whereType<Product>()
+          .toList();
+    });
+  }
+
+  /// Event flash sale yang SEDANG aktif (startAt <= now < endAt). Hanya satu
+  /// event boleh aktif. Dipakai keranjang untuk harga & aturan beli.
+  Future<FlashSale?> getActiveFlashSale() async {
+    final now = DateTime.now();
+    final snap = await _db
+        .collection('flash_sales')
+        .where('endAt', isGreaterThan: Timestamp.fromDate(now))
+        .get();
+    FlashSale? active;
+    for (final doc in snap.docs) {
+      final fs = FlashSale.fromFirestore(doc);
+      if (fs.statusAt(now) == FlashSaleStatus.active) {
+        if (active == null || fs.startAt.isAfter(active.startAt)) active = fs;
+      }
+    }
+    return active;
+  }
+
   Stream<List<Order>> getOrdersStream(String userId) {
     return _db
         .collection('orders')

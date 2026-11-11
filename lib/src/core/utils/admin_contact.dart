@@ -28,6 +28,24 @@ Future<AdminContact?> fetchAdminContact() async {
   return AdminContact(name: (d['name'] ?? 'Admin').toString(), whatsapp: wa);
 }
 
+/// Ambil SEMUA kontak WhatsApp admin (urut createdAt) dari whatsapp_contacts.
+Future<List<AdminContact>> fetchAdminContacts() async {
+  final snap = await FirebaseFirestore.instance
+      .collection('whatsapp_contacts')
+      .orderBy('createdAt')
+      .get();
+  return snap.docs
+      .map((d) {
+        final data = d.data();
+        return AdminContact(
+          name: (data['name'] ?? 'Admin').toString(),
+          whatsapp: (data['whatsapp'] ?? '').toString(),
+        );
+      })
+      .where((c) => c.whatsapp.trim().isNotEmpty)
+      .toList();
+}
+
 /// Buka WhatsApp admin dengan pesan terisi otomatis. Return false bila gagal.
 Future<bool> openAdminWhatsapp(String whatsapp, String text) async {
   final digits = whatsapp.replaceAll(RegExp(r'[^0-9]'), '');
@@ -80,4 +98,24 @@ String productChatMessage({
       '🛍️ $name\n'
       '💰 ${_rp.format(price)}\n'
       '🔗 $link';
+}
+
+/// Pesan produk untuk WhatsApp admin (opsi WhatsApp di detail produk).
+String productWhatsappMessage({
+  required String name,
+  required double price,
+  required String link,
+  required String adminName,
+}) {
+  return 'Halo $adminName, saya ingin bertanya tentang produk ini:\n\n'
+      '🛍️ $name\n'
+      '💰 ${_rp.format(price)}\n'
+      '🔗 $link\n\n'
+      'Yang ingin saya tanyakan: ';
+}
+
+/// Pesan umum untuk WhatsApp admin (tombol Hubungi di appbar, tanpa konteks).
+String generalWhatsappMessage(String adminName) {
+  return 'Halo $adminName, saya ingin bertanya.\n\n'
+      'Yang ingin saya tanyakan: ';
 }

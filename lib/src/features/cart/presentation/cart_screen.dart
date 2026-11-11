@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../application/cart_provider.dart';
+import '../../products/application/promotion_provider.dart';
+import '../../flash_sale/application/flash_sale_provider.dart';
 import '../../authentication/data/auth_service.dart';
 import '../../profile/presentation/edit_profile_screen.dart';
 
@@ -120,6 +122,23 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  void _showFlashBlockDialog(String title, String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Mengerti'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleCheckout() async {
     final cart = context.read<CartProvider>();
     if (cart.items.isEmpty || _isCheckingStock) {
@@ -137,6 +156,43 @@ class _CartScreenState extends State<CartScreen> {
       setState(() => _isCheckingStock = false);
       _showWhatsappGate();
       return;
+    }
+
+    // ── Validasi aturan Flash Sale (termasuk produk yang ditambahkan ke
+    //    keranjang SEBELUM event aktif, agar tak bisa mengelabui sistem) ──
+    final flash = await cart.activeFlashSale();
+    if (flash != null) {
+      final flashItems =
+          cart.items.where((it) => flash.productIds.contains(it.productId)).toList();
+      // Hanya 1 produk unik flash sale yang boleh ada di keranjang.
+      if (flash.oneItemPerEvent && flashItems.length > 1) {
+        if (!mounted) return;
+        setState(() => _isCheckingStock = false);
+        _showFlashBlockDialog(
+          'Hanya 1 Produk Flash Sale',
+          'Flash sale "${flash.title}" hanya memperbolehkan 1 produk per pesanan. '
+              'Di keranjang Anda ada ${flashItems.length} produk flash sale: '
+              '${flashItems.map((e) => '"${e.nama}"').join(', ')}. '
+              'Hapus hingga tersisa 1 produk untuk melanjutkan.',
+        );
+        return;
+      }
+      // Batas jumlah pcs per produk flash sale.
+      final cap = flash.oneItemPerEvent ? 1 : (flash.maxQtyPerBuyer ?? 0);
+      if (cap > 0) {
+        final over = flashItems.where((it) => it.quantity > cap).toList();
+        if (over.isNotEmpty) {
+          if (!mounted) return;
+          setState(() => _isCheckingStock = false);
+          _showFlashBlockDialog(
+            'Batas Flash Sale',
+            'Produk flash sale ${over.map((e) => '"${e.nama}"').join(', ')} '
+                'melebihi batas maksimal $cap pcs per pesanan. '
+                'Kurangi jumlahnya untuk melanjutkan.',
+          );
+          return;
+        }
+      }
     }
 
     final List<CartItemUI> outOfStockItems = [];
@@ -168,6 +224,10 @@ class _CartScreenState extends State<CartScreen> {
       return;
     }
 
+    // Widget bisa sudah ter-dispose selama await cek stok (pengguna keluar
+    // dari layar) → setState memanggil `_element!` yang null → crash
+    // "Null check operator used on a null value". Guard dulu.
+    if (!mounted) return;
     setState(() {
       _isCheckingStock = false;
     });
@@ -352,14 +412,53 @@ class _CartItemCardState extends State<_CartItemCard> {
     }
   }
 
+  // true bila produk ini punya promo "maksimal 1 pcs per pesanan".
+  bool _isLimitedPromo() {
+    final promo = context
+        .read<PromotionProvider>()
+        .getPromotionForProduct(widget.item.productId);
+    return promo != null && promo.isLimitedToOne;
+  }
+
+  // true bila produk ini sedang masuk flash sale AKTIF.
+  bool _isFlashProduct() =>
+      context
+          .read<FlashSaleProvider>()
+          .activeEvent()
+          ?.flashPriceFor(widget.item.productId) !=
+      null;
+
+  // Batas maksimal per item: flash sale (1 / maxQtyPerBuyer) > promo 1 pcs > stok.
+  int _effectiveMax() {
+    final flash = context.read<FlashSaleProvider>().activeEvent();
+    if (flash != null && flash.flashPriceFor(widget.item.productId) != null) {
+      final cap = flash.oneItemPerEvent ? 1 : (flash.maxQtyPerBuyer ?? widget.item.stok);
+      return widget.item.stok > 0 ? cap.clamp(1, widget.item.stok) : 0;
+    }
+    if (_isLimitedPromo()) return widget.item.stok > 0 ? 1 : 0;
+    return widget.item.stok;
+  }
+
+  // Snackbar batas — pesan menyesuaikan flash sale / promo.
+  void _showLimitSnack() {
+    if (!mounted) return;
+    final msg = _isFlashProduct()
+        ? 'Produk flash sale ini melebihi batas maksimal pembelian.'
+        : 'Produk promo ini maksimal 1 pcs per pesanan.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
+  }
+
   void _onQuantityChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     int newQuantity = int.tryParse(value) ?? 0;
-    final stock = widget.item.stok;
+    final stock = _effectiveMax();
 
     if (newQuantity > stock) {
       _quantityController.text = stock.toString();
       _quantityController.selection = TextSelection.fromPosition(TextPosition(offset: _quantityController.text.length));
+      if (_isFlashProduct() || _isLimitedPromo()) _showLimitSnack();
       newQuantity = stock;
     }
 
@@ -377,7 +476,11 @@ class _CartItemCardState extends State<_CartItemCard> {
     final currentVal = int.tryParse(_quantityController.text) ?? widget.item.quantity;
     int newQuantity = currentVal + change;
 
-    if (newQuantity > widget.item.stok) newQuantity = widget.item.stok;
+    final maxQ = _effectiveMax();
+    if (newQuantity > maxQ) {
+      newQuantity = maxQ;
+      if (change > 0 && (_isFlashProduct() || _isLimitedPromo())) _showLimitSnack();
+    }
     if (newQuantity <= 0) {
       context.read<CartProvider>().removeItem(widget.item.productId);
     } else {

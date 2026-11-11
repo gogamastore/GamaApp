@@ -169,6 +169,7 @@ class HomeBlockType {
   static const categories = 'categories';
   static const parentCategories = 'parentCategories';
   static const products = 'products';
+  static const flashSale = 'flashSale';
   static const search = 'search';
   static const text = 'text';
   static const image = 'image';
@@ -176,7 +177,7 @@ class HomeBlockType {
   static const button = 'button';
 
   static const all = {
-    banner, brands, categories, parentCategories, products, search, text, image, spacer, button,
+    banner, brands, categories, parentCategories, products, flashSale, search, text, image, spacer, button,
   };
 }
 
@@ -424,6 +425,36 @@ class ProductBlockConfig {
 
   /// Kunci yang menentukan query Firestore; bila berubah stream dibuat ulang.
   String get queryKey => '$source|$category|$brandId|$limit|$hideOutOfStock';
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Konfigurasi blok Flash Sale
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Blok "Flash Sale" — menampilkan event dari koleksi `flash_sales` secara
+/// realtime (aktif / teaser harga tersensor). Tidak memilih event tertentu;
+/// blok otomatis menampilkan event yang sedang berlangsung/akan dimulai.
+class FlashSaleBlockConfig {
+  final int gridColumns;
+  final int limit;
+  final bool showCountdown;
+  final ProductCardStyle card;
+
+  const FlashSaleBlockConfig({
+    required this.gridColumns,
+    required this.limit,
+    required this.showCountdown,
+    required this.card,
+  });
+
+  factory FlashSaleBlockConfig.fromConfig(ConfigMap c) {
+    return FlashSaleBlockConfig(
+      gridColumns: c.integer('gridColumns', 3).clamp(1, 4),
+      limit: c.integer('limit', 12).clamp(1, 50),
+      showCountdown: c.boolean('showCountdown', true),
+      card: ProductCardStyle.fromMap(c.child('card')),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

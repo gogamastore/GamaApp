@@ -15,6 +15,7 @@ import 'src/core/data/firestore_service.dart';
 import 'src/features/profile/application/address_provider.dart';
 import 'src/features/authentication/presentation/splash_screen.dart';
 import 'src/features/products/application/promotion_provider.dart'; // Impor baru
+import 'src/features/flash_sale/application/flash_sale_provider.dart';
 import 'src/features/home_layout/application/app_layout_provider.dart';
 
 void main() async {
@@ -122,6 +123,10 @@ class MyApp extends StatelessWidget {
         // --- PENAMBAHAN PROVIDER PROMOSI ---
         ChangeNotifierProvider<PromotionProvider>(
           create: (context) => PromotionProvider(context.read<FirestoreService>()),
+        ),
+        // Flash sale realtime (koleksi flash_sales).
+        ChangeNotifierProvider<FlashSaleProvider>(
+          create: (context) => FlashSaleProvider(context.read<FirestoreService>()),
         ),
         ChangeNotifierProxyProvider<AuthService, CartProvider>(
           create: (context) => CartProvider(

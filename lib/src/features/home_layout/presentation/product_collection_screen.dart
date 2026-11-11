@@ -25,8 +25,13 @@ class ProductCollectionScreen extends StatefulWidget {
 }
 
 class _ProductCollectionScreenState extends State<ProductCollectionScreen> {
-  late final Stream<List<Product>> _stream =
-      context.read<FirestoreService>().getProductsForSource(
+  // Trending "Lihat Semua": tampilkan SEMUA produk (diurut terlaris), sama
+  // seperti web yang menampilkan ribuan produk — bukan hanya top-30 terbatas
+  // dari getTrendingProductsStream(). Sumber lain (kategori/brand/latest) tetap
+  // memakai getProductsForSource dengan batas wajar.
+  late final Stream<List<Product>> _stream = widget.source == 'trending'
+      ? context.read<FirestoreService>().getProductsStream()
+      : context.read<FirestoreService>().getProductsForSource(
             source: widget.source,
             category: widget.category,
             brandId: widget.brandId,
@@ -52,12 +57,18 @@ class _ProductCollectionScreenState extends State<ProductCollectionScreen> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          // Produk tersedia lebih dulu, sama seperti katalog.
+          // Produk tersedia lebih dulu, sama seperti katalog. Khusus trending,
+          // di antara produk tersedia diurut TERLARIS (soldCount) dulu — meniru
+          // halaman trending web.
+          final isTrending = widget.source == 'trending';
           final products = List<Product>.of(snapshot.data!)
             ..sort((a, b) {
               final aReady = a.stock > 0;
               final bReady = b.stock > 0;
               if (aReady != bReady) return aReady ? -1 : 1;
+              if (isTrending && a.soldCount != b.soldCount) {
+                return b.soldCount.compareTo(a.soldCount);
+              }
               return a.name.toLowerCase().compareTo(b.name.toLowerCase());
             });
           if (products.isEmpty) {

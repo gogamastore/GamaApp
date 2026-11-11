@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -6,11 +8,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/data/firestore_service.dart';
 import '../../../core/utils/admin_contact.dart';
+import '../../../core/widgets/contact_admin_sheet.dart';
 import '../../../core/utils/format_sold.dart';
 import '../domain/brand.dart';
 import '../domain/product.dart';
 import '../../reviews/domain/review.dart';
 import '../application/promotion_provider.dart';
+import '../../flash_sale/application/flash_sale_provider.dart';
 import '../../cart/application/cart_provider.dart';
 import '../../home_layout/presentation/block_frame.dart';
 import 'widgets/quantity_selector.dart';
@@ -33,6 +37,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Product? _product;
   Future<Product?>? _fetchProductFuture;
   int _selectedQuantity = 1;
+  // Ticker agar harga flash sale muncul/kembali normal tepat waktu (realtime).
+  Timer? _ticker;
 
   @override
   void initState() {
@@ -46,6 +52,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (_product?.stock == 0) {
       _selectedQuantity = 0;
     }
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
   }
 
   void _onQuantityChanged(int newQuantity) {
@@ -72,6 +87,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       _product!,
       _selectedQuantity,
       discountPrice: discountPrice,
+      // Batas 1 pcs per pesanan bila promo mengaktifkannya (maxQtyPerBuyer==1).
+      maxQtyPerBuyer: promo?.maxQtyPerBuyer,
     );
 
     if (!mounted) return; // Pastikan widget masih ada di tree
@@ -112,12 +129,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Harap login terlebih dahulu.')),
         );
+      case AddToCartResult.limitedPromo:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Produk promo ini dibatasi maksimal 1 pcs per pesanan.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      case AddToCartResult.flashLimited:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Produk flash sale ini melebihi batas maksimal pembelian.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      case AddToCartResult.flashOneItem:
+        showInfoDialog('Hanya 1 Produk Flash Sale',
+            'Flash sale ini hanya memperbolehkan 1 produk per pesanan. Hapus dulu produk flash sale lain di keranjang untuk memilih produk ini.');
     }
   }
   // --- AKHIR FUNGSI BARU ---
 
-  // Chat: buka obrolan aplikasi & kirim otomatis link produk ke admin.
-  void _handleChatAboutProduct(Product product, double price) {
+  // ── Hubungi admin: Obrolan + daftar kontak WhatsApp (whatsapp_contacts) ──
+  void _showContactSheet(Product product, double price) {
+    final link = 'https://gallerypos.web.app/reseller/products/${product.id}';
+    showAdminContactSheet(
+      context,
+      onChat: () => _contactViaChat(product, price),
+      buildWhatsappMessage: (adminName) => productWhatsappMessage(
+        name: product.name,
+        price: price,
+        link: link,
+        adminName: adminName,
+      ),
+    );
+  }
+
+  // Obrolan: buka obrolan aplikasi & kirim otomatis link produk ke admin.
+  void _contactViaChat(Product product, double price) {
     final link = 'https://gallerypos.web.app/reseller/products/${product.id}';
     final msg = productChatMessage(name: product.name, price: price, link: link);
     context.push('/chat', extra: msg);
@@ -170,16 +223,36 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       _selectedQuantity = 1;
     }
 
-    // --- Logika Promo (mirror halaman web reseller) ---
+    // --- Harga: FLASH SALE aktif > promo > normal (mirror web reseller) ---
     final promo = context.watch<PromotionProvider>().getPromotionForProduct(product.id);
     final bool hasPromo = promo != null;
+
+    final flashEvent = context.watch<FlashSaleProvider>().activeEvent();
+    final double? flashPrice = flashEvent?.flashPriceFor(product.id);
+    final bool flashOn =
+        flashPrice != null && flashPrice > 0 && flashPrice < product.price;
+
     final double originalPrice = product.price;
-    final double discountedPrice = hasPromo ? promo.discountPrice : product.price;
-    final bool showStrike = hasPromo && originalPrice > discountedPrice;
+    final double discountedPrice = flashOn
+        ? flashPrice
+        : (hasPromo ? promo.discountPrice : product.price);
+    final bool showStrike = discountedPrice < originalPrice;
     final int discountPercent = showStrike
         ? (((originalPrice - discountedPrice) / originalPrice) * 100).round()
         : 0;
-    final double displayPrice = hasPromo ? discountedPrice : product.price;
+    final double displayPrice = discountedPrice;
+
+    // Batas jumlah: flash sale (1 / maxQtyPerBuyer) > promo 1 pcs > stok.
+    final bool isLimitedPromo = !flashOn && (promo?.isLimitedToOne ?? false);
+    final int? flashCap = flashOn
+        ? (flashEvent!.oneItemPerEvent ? 1 : flashEvent.maxQtyPerBuyer)
+        : null;
+    final int capValue = flashCap ?? (isLimitedPromo ? 1 : product.stock);
+    final int effectiveMax =
+        product.stock > 0 ? capValue.clamp(1, product.stock) : 0;
+    if (_selectedQuantity > effectiveMax) {
+      _selectedQuantity = effectiveMax;
+    }
 
     final bool stockAvailable = product.stock > 0;
     // Tampilkan berat ASLI dari dokumen produk (bukan fallback manual 200gr).
@@ -261,6 +334,49 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                 ),
+              // Keterangan Flash Sale aktif.
+              if (flashOn)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flash_on,
+                          size: 16, color: Color(0xFFE11D48)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          flashEvent!.oneItemPerEvent
+                              ? 'Harga Flash Sale sedang berlangsung — maksimal 1 produk & 1 pcs dari event ini.'
+                              : (flashEvent.maxQtyPerBuyer != null
+                                  ? 'Harga Flash Sale sedang berlangsung — maksimal ${flashEvent.maxQtyPerBuyer} pcs.'
+                                  : 'Harga Flash Sale sedang berlangsung.'),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFFE11D48),
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              // Keterangan promo "maksimal 1 pcs per pesanan" (bila bukan flash).
+              if (isLimitedPromo)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Promo ini dibatasi maksimal 1 pcs per pesanan.',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 8),
               Text(
                 product.name,
@@ -328,6 +444,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 color: colorScheme.error,
                                 fontWeight: FontWeight.bold,
                               ),
+                            ),
+                          ),
+                        ],
+                        if (flashOn) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0x1AE11D48),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.flash_on,
+                                    size: 14, color: Color(0xFFE11D48)),
+                                const SizedBox(width: 2),
+                                Text(
+                                  'Flash Sale',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: const Color(0xFFE11D48),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -443,11 +584,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Kiri: tombol Chat (ikon + teks "Chat")
+              // Kiri: tombol Hubungi (Obrolan / WhatsApp)
               OutlinedButton.icon(
-                onPressed: () => _handleChatAboutProduct(product, displayPrice),
+                onPressed: () => _showContactSheet(product, displayPrice),
                 icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Chat'),
+                label: const Text('Hubungi'),
                 style: OutlinedButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -475,7 +616,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 const SizedBox(width: 8),
                 QuantitySelector(
                   quantity: _selectedQuantity,
-                  stock: product.stock,
+                  stock: effectiveMax,
                   onChanged: _onQuantityChanged,
                 ),
               ],

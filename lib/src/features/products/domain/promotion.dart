@@ -8,6 +8,8 @@ class Promotion {
   final double discountPrice;
   final DateTime startDate;
   final DateTime endDate;
+  // 1 = produk promo dibatasi maksimal 1 pcs per pesanan (online); null = bebas.
+  final int? maxQtyPerBuyer;
 
   Promotion({
     required this.id,
@@ -15,7 +17,11 @@ class Promotion {
     required this.discountPrice,
     required this.startDate,
     required this.endDate,
+    this.maxQtyPerBuyer,
   });
+
+  /// true bila promo membatasi pembelian maksimal 1 pcs per pesanan.
+  bool get isLimitedToOne => maxQtyPerBuyer == 1;
 
   factory Promotion.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
@@ -41,6 +47,7 @@ class Promotion {
       discountPrice: price, // Gunakan harga yang sudah divalidasi
       startDate: (data['startDate'] as Timestamp).toDate(),
       endDate: (data['endDate'] as Timestamp).toDate(),
+      maxQtyPerBuyer: (data['maxQtyPerBuyer'] as num?)?.toInt(),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/app_layout.dart';
 import 'blocks/content_blocks.dart';
+import 'blocks/flash_sale_block.dart';
 import 'blocks/product_block.dart';
 
 /// Merender satu blok beranda sesuai tipenya.
@@ -18,6 +19,7 @@ class HomeBlockView extends StatelessWidget {
       HomeBlockType.categories => CategoriesBlockView(block: block),
       HomeBlockType.parentCategories => ParentCategoriesBlockView(block: block),
       HomeBlockType.products => ProductBlockView(block: block),
+      HomeBlockType.flashSale => FlashSaleBlockView(block: block),
       HomeBlockType.search => SearchBlockView(block: block),
       HomeBlockType.text => TextBlockView(block: block),
       HomeBlockType.image => ImageBlockView(block: block),

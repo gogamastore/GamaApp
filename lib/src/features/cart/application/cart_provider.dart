@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../../core/data/firestore_service.dart';
 import '../../authentication/data/auth_service.dart';
+import '../../flash_sale/domain/flash_sale.dart';
 import '../../products/domain/product.dart';
 import '../domain/cart_item.dart';
 import '../presentation/cart_screen.dart'; // Using CartItemUI
@@ -13,6 +14,9 @@ enum AddToCartResult {
   cartFull, // sudah 160 produk unik
   insufficientStock, // total di keranjang akan melebihi stok
   notLoggedIn,
+  limitedPromo, // produk promo dibatasi maks 1 pcs per pesanan
+  flashLimited, // produk flash sale melebihi batas maksimal pembelian
+  flashOneItem, // flash sale: hanya 1 produk per event boleh di keranjang
 }
 
 class CartProvider with ChangeNotifier {
@@ -64,7 +68,7 @@ class CartProvider with ChangeNotifier {
 
   // --- LOGIKA BARU DIMULAI DI SINI ---
   Future<AddToCartResult> addItemToCart(Product product, int quantity,
-      {double? discountPrice}) async {
+      {double? discountPrice, int? maxQtyPerBuyer}) async {
     final user = _authService.currentUser;
     if (user == null) return AddToCartResult.notLoggedIn;
 
@@ -84,7 +88,36 @@ class CartProvider with ChangeNotifier {
     // AKUMULASI (bukan menimpa) — samakan dengan web: qty lama + qty baru.
     // `setCartItem` memakai set(merge:true) yang MENIMPA field quantity, jadi
     // totalnya harus dihitung di sini.
-    final int newQuantity = currentQty + quantity;
+    int newQuantity = currentQty + quantity;
+
+    // Batas 1 pcs per pesanan untuk produk promo (maxQtyPerBuyer==1).
+    if (maxQtyPerBuyer != null && maxQtyPerBuyer > 0 && newQuantity > maxQtyPerBuyer) {
+      newQuantity = maxQtyPerBuyer;
+      // Sudah di batas & tak bisa bertambah → beri tahu pembeli, jangan tulis ulang.
+      if (newQuantity <= currentQty) {
+        return AddToCartResult.limitedPromo;
+      }
+    }
+
+    // ── Aturan flash sale aktif (terpusat: berlaku dari jalur add mana pun) ──
+    double? effectivePrice = discountPrice;
+    final flash = await _firestoreService.getActiveFlashSale();
+    if (flash != null && flash.flashPriceFor(product.id) != null) {
+      // "Hanya 1 produk per event": tolak bila sudah ada produk flash lain.
+      if (flash.oneItemPerEvent) {
+        final hasOther = _items.any((it) =>
+            it.productId != product.id &&
+            flash.productIds.contains(it.productId));
+        if (hasOther) return AddToCartResult.flashOneItem;
+      }
+      final cap = flash.oneItemPerEvent ? 1 : (flash.maxQtyPerBuyer ?? 0);
+      if (cap > 0 && newQuantity > cap) {
+        newQuantity = cap;
+        if (newQuantity <= currentQty) return AddToCartResult.flashLimited;
+      }
+      // Harga flash menimpa harga promo/normal selama event aktif.
+      effectivePrice = flash.flashPriceFor(product.id);
+    }
 
     // Karena kini terakumulasi, stok harus divalidasi terhadap TOTAL — batas
     // di UI hanya membatasi qty yang dipilih sekali tambah.
@@ -92,8 +125,8 @@ class CartProvider with ChangeNotifier {
       return AddToCartResult.insufficientStock;
     }
 
-    final productToAdd = discountPrice != null
-        ? product.copyWith(price: discountPrice)
+    final productToAdd = effectivePrice != null
+        ? product.copyWith(price: effectivePrice)
         : product;
 
     final cartItem = CartItem(product: productToAdd, quantity: newQuantity);
@@ -103,12 +136,23 @@ class CartProvider with ChangeNotifier {
   }
   // --- LOGIKA BARU BERAKHIR DI SINI ---
 
+  /// Event flash sale yang sedang aktif (untuk validasi keranjang & checkout).
+  Future<FlashSale?> activeFlashSale() => _firestoreService.getActiveFlashSale();
+
   Future<void> updateQuantity(String productId, int newQuantity) async {
     final user = _authService.currentUser;
     if (user == null) return;
 
     final itemIndex = _items.indexWhere((item) => item.productId == productId);
     if (itemIndex == -1) return;
+
+    // Batas flash sale aktif (cap qty produk flash) — defense in depth agar
+    // stepper keranjang tak bisa melewati batas, sama seperti web.
+    final flash = await _firestoreService.getActiveFlashSale();
+    if (flash != null && flash.flashPriceFor(productId) != null) {
+      final cap = flash.oneItemPerEvent ? 1 : (flash.maxQtyPerBuyer ?? newQuantity);
+      if (cap > 0 && newQuantity > cap) newQuantity = cap;
+    }
 
     final oldQuantity = _items[itemIndex].quantity;
 
